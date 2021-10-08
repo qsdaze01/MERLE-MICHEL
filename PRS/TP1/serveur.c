@@ -23,29 +23,29 @@ int main(){
 
     addr_serv.sin_addr.s_addr = INADDR_ANY;
     char addr_any[INET_ADDRSTRLEN];
-    printf("Valeur retournée par aton : %d \n", inet_aton("0.0.0.0", (struct in_addr *) &addr_serv.sin_addr.s_addr));
+    printf("Valeur retournée par aton : %d \n", inet_aton("0.0.0.0", &addr_serv.sin_addr));
     inet_ntop(AF_INET, &addr_serv.sin_addr.s_addr, addr_any, sizeof(addr_any));
     printf("Adresse Serveur : %s \n", addr_any);
 
-    addr_serv.sin_port = 1234;
+    addr_serv.sin_port = htons(1234);
+    addr_serv.sin_family = AF_INET;
 
-    if(bind(socketServeur, (struct sockaddr *) &addr_serv.sin_addr.s_addr, (socklen_t) sizeof(addr_serv.sin_addr.s_addr)) == -1){
+    if(bind(socketServeur, (struct sockaddr *) &addr_serv, sizeof(addr_serv)) == -1){
         printf("bind \n");
         return(-1);
     }
 
-    if(listen(socketServeur, 10) == -1){
+    if(listen(socketServeur, 10) != 0){
         printf("listen \n");
         return(-1);
     }
 
-    while(1){
-        int a = accept(socketServeur, (struct sockaddr *) 0, (socklen_t *) 0);
-        printf("%d \n", a);
-        /*if(accept(socketServeur, (struct sockaddr *) 0, (socklen_t *) 0) != -1){
-            printf("a \n");
-        }*/
-    }
+    struct sockaddr_in addr_client;
+    memset((char*) &addr_client, 0, sizeof(addr_client));
+
+    int sizeClient = sizeof(addr_client);
+    int a = accept(socketServeur, (struct sockaddr *) &addr_client, (socklen_t *) &sizeClient);
+    printf("%d \n", a);
 
     return(0);
 }

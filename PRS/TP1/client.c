@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 int main(){
     
@@ -21,19 +22,16 @@ int main(){
     struct sockaddr_in addr_client;
     memset((char*) &addr_client, 0, sizeof(addr_client));
 
-    addr_client.sin_addr.s_addr = INADDR_ANY;
+    //addr_client.sin_addr.s_addr = INADDR_LOOPBACK;
     char addr_any[INET_ADDRSTRLEN];
-    printf("Valeur retournée par aton : %d \n", inet_aton("127.0.0.2", &addr_client.sin_addr.s_addr));
+    printf("Valeur retournée par aton : %d \n", inet_aton("127.0.0.1", &addr_client.sin_addr));
     inet_ntop(AF_INET, &addr_client.sin_addr.s_addr, addr_any, sizeof(addr_any));
     printf("Adresse Client : %s \n", addr_any);
 
-    addr_client.sin_port = 1234;
+    addr_client.sin_port = htons(1234);
+    addr_client.sin_family = AF_INET;
 
-    struct sockaddr_in addr_serv;
-    memset((char*) &addr_serv, 0, sizeof(addr_serv));   
-
-    addr_serv.sin_addr.s_addr = INADDR_ANY;
-    connect(socketClient, &addr_serv.sin_addr.s_addr, sizeof(addr_serv.sin_addr.s_addr));
+    connect(socketClient, (struct sockaddr *) &addr_client, sizeof(addr_client));
 
     return(0);
 }
