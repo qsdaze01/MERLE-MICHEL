@@ -40,7 +40,7 @@ int main(){
     message[1] = 'r';
     while(1){
         if(read(socketClient, buffer, sizeof(buffer)-1) == -1){
-            printf("error");
+            printf("error \n");
             return(-1);
         }
         printf("%s \n", buffer);
