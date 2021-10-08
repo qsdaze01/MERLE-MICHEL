@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 int main(){
 
@@ -44,8 +45,22 @@ int main(){
     memset((char*) &addr_client, 0, sizeof(addr_client));
 
     int sizeClient = sizeof(addr_client);
-    int a = accept(socketServeur, (struct sockaddr *) &addr_client, (socklen_t *) &sizeClient);
-    printf("%d \n", a);
+    int socketClient = accept(socketServeur, (struct sockaddr *) &addr_client, (socklen_t *) &sizeClient);
+    printf("%d \n", socketClient);
 
+    char message[3];
+    message[0] = 'a';
+    message[1] = 'z';
+    char buffer[3];
+    while(1){
+        write(socketClient, message, sizeof(message)-1);
+        if(read(socketClient, buffer, sizeof(buffer)-1) == -1){
+            printf("error \n");
+            return(-1);
+        }
+        printf("%s \n", buffer);
+
+    }
+    
     return(0);
 }
