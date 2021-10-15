@@ -10,8 +10,13 @@
 
 int main (int argc, char *argv[]) {
 
+    if(argc != 3){
+        perror("Missing args : ./client <server_address> <server_port>");
+        return -1;
+    }
+
   struct sockaddr_in adresse;
-  int port = 5001;
+  int port = atoi(argv[2]);
   int valid = 1;
   char msg[RCVSIZE];
   char blanmsg[RCVSIZE];
@@ -29,7 +34,7 @@ int main (int argc, char *argv[]) {
 
   adresse.sin_family= AF_INET;
   adresse.sin_port= htons(port);
-  adresse.sin_addr.s_addr= htonl(INADDR_LOOPBACK);
+  adresse.sin_addr.s_addr= htonl(atoi(argv[1]));
 
   // connect
   int rc = connect(server_desc, (struct sockaddr*)&adresse, sizeof(adresse));
