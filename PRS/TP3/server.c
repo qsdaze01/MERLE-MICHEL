@@ -23,7 +23,8 @@ int main (int argc, char *argv[]) {
     int port_communication = atoi(argv[2]);
     int valid_udp = 1;
     char handshake_1[RCVSIZE];
-    char *handshake_2 = "SYN ACK ";
+    char handshake_2[RCVSIZE] = "SYN ACK ";
+    char handshake_3[RCVSIZE];
     strcat(handshake_2, argv[2]);
 
     //create socket
@@ -55,10 +56,17 @@ int main (int argc, char *argv[]) {
         select(5, &sockets, NULL, NULL, NULL); //on surveille uniquement l'envoie de flux vers le serveur
 
         if(FD_ISSET(udp_desc, &sockets) == 1){
-            int len = sizeof(adresse_udp);
-            recvfrom(udp_desc, (char *)handshake_1, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);
-            printf("Client > %s \n", handshake_1);
-            sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);
+            socklen_t len = sizeof(adresse_udp);
+            recvfrom(udp_desc, (char *)handshake_1, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);                        
+            if(strcmp(handshake_1, "SYN") == 0){
+                printf("OK 1 \n");
+                sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);               
+                recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);            
+                if(strcmp(handshake_3, "ACK") == 0){
+                    printf("OK \n");
+                }
+            }
+
             printf("Message resent to the client \n");
         }
 
