@@ -10,12 +10,13 @@
 
 int main (int argc, char *argv[]) {
 
-    if(argc != 3){
-        perror("Missing args : ./client <server_address> <server_port>");
+    if(argc != 4){
+        perror("Missing args : ./client <server_address> <server_port> <file name>");
         return -1;
     }
 
     struct sockaddr_in adresse;
+    struct sockaddr_in adresse_com;
     int port = atoi(argv[2]);
     int valid = 1;
     int word = 0;
@@ -24,6 +25,7 @@ int main (int argc, char *argv[]) {
     char handshake_2[RCVSIZE];
     char *handshake_3 = "ACK";
     char *ptr_word[RCVSIZE];
+    char *fileName = argv[3];
 
     //create socket
     int server_desc = socket(AF_INET, SOCK_DGRAM, 0);
@@ -71,6 +73,22 @@ int main (int argc, char *argv[]) {
     }
 
     sendto(server_desc, (const char *)handshake_3, RCVSIZE, 0, (const struct sockaddr *) &adresse, len);
+
+    int com_desc = socket(AF_INET, SOCK_DGRAM, 0);
+    setsockopt(com_desc, SOL_SOCKET, SO_REUSEADDR, &valid, sizeof(int));
+
+    adresse_com.sin_family = AF_INET;
+    adresse_com.sin_port= htons(port_communication);
+    adresse_com.sin_addr.s_addr = htonl(INADDR_ANY);
+                    
+    if (bind(com_desc, (struct sockaddr*) &adresse_com, sizeof(adresse_com)) == -1) {
+        perror("Bind UDP failed\n");
+        close(com_desc);
+        return -1;
+    }
+
+    sendto(com_desc, (const char *)fileName, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
+
 
     while (1) {
         //sendto(server_desc, (const char *)msg, RCVSIZE, 0, (const struct sockaddr *) &adresse, len);

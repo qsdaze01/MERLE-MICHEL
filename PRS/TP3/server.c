@@ -27,6 +27,7 @@ int main (int argc, char *argv[]) {
     char handshake_2[RCVSIZE] = "SYN ACK ";
     char handshake_3[RCVSIZE];
     strcat(handshake_2, argv[2]);
+    char fileName[RCVSIZE];
 
     //create socket
     int udp_desc = socket(AF_INET, SOCK_DGRAM, 0);
@@ -80,7 +81,7 @@ int main (int argc, char *argv[]) {
                 recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);            
                 if(strcmp(handshake_3, "ACK") == 0){
                     printf("OK \n");
-                    
+                    recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);            
                 }
             }
 
