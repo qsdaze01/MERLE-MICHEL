@@ -22,7 +22,7 @@ int main (int argc, char *argv[]) {
     int port_udp = atoi(argv[1]);
     int valid= 1;
     int valid_udp = 1;
-    socklen_t alen= sizeof(client);
+    socklen_t alen= sizeof(adress_udp);
     char buffer[RCVSIZE];
 
     //create socket
