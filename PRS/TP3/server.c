@@ -23,7 +23,8 @@ int main (int argc, char *argv[]) {
     int port_communication = atoi(argv[2]);
     int valid_udp = 1;
     char handshake_1[RCVSIZE];
-    char *handshake_2 = "SYN ACK " + port_communication;
+    char *handshake_2 = "SYN ACK ";
+    strcat(handshake_2, argv[2]);
 
     //create socket
     int udp_desc = socket(AF_INET, SOCK_DGRAM, 0);
@@ -57,7 +58,7 @@ int main (int argc, char *argv[]) {
             int len = sizeof(adresse_udp);
             recvfrom(udp_desc, (char *)handshake_1, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);
             printf("Client > %s \n", handshake_1);
-            sendto(udp_desc, (const char *)handshake_2, RCVSIZE, MSG_CONFIRM, (const struct sockaddr *) &adresse_udp, len);
+            sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);
             printf("Message resent to the client \n");
         }
 
