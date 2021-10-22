@@ -18,6 +18,7 @@ int main (int argc, char *argv[]) {
     }
 
     struct sockaddr_in adresse_udp;
+    struct sockaddr_in adresse_com;
     fd_set sockets; //creation ensemble de descripteurs
     int port_udp = atoi(argv[1]);
     int port_communication = atoi(argv[2]);
@@ -60,10 +61,26 @@ int main (int argc, char *argv[]) {
             recvfrom(udp_desc, (char *)handshake_1, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);                        
             if(strcmp(handshake_1, "SYN") == 0){
                 printf("OK 1 \n");
+                
+                int com_desc = socket(AF_INET, SOCK_DGRAM, 0);
+                setsockopt(com_desc, SOL_SOCKET, SO_REUSEADDR, &valid_udp, sizeof(int));
+
+                adresse_com.sin_family = AF_INET;
+                adresse_com.sin_port= htons(port_communication);
+                adresse_com.sin_addr.s_addr = htonl(INADDR_ANY);
+                    
+                if (bind(com_desc, (struct sockaddr*) &adresse_com, sizeof(adresse_com)) == -1) {
+                    perror("Bind UDP failed\n");
+                    close(com_desc);
+                    return -1;
+                }
+                //mettre le fork()
+
                 sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);               
                 recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);            
                 if(strcmp(handshake_3, "ACK") == 0){
                     printf("OK \n");
+                    
                 }
             }
 
