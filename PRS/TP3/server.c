@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define RCVSIZE 1024
 
@@ -75,13 +76,23 @@ int main (int argc, char *argv[]) {
                     close(com_desc);
                     return -1;
                 }
-                //mettre le fork()
 
                 sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);               
                 recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);            
                 if(strcmp(handshake_3, "ACK") == 0){
                     printf("OK \n");
-                    recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);            
+                    pid_t pid_val = fork();
+                    printf("%d \n", pid_val);
+                    if(pid_val == 0){
+                        printf("fdf\n");
+                        close(udp_desc);
+                        printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
+                        recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+                        printf("%s\n", fileName);            
+                    }else{
+                        close(com_desc);
+                        port_communication++;
+                    }
                 }
             }
 

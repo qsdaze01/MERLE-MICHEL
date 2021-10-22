@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define RCVSIZE 1024
 
@@ -40,7 +41,7 @@ int main (int argc, char *argv[]) {
 
     adresse.sin_family= AF_INET;
     adresse.sin_port= htons(port);
-    adresse.sin_addr.s_addr= htonl(atoi(argv[1]));
+    inet_aton(argv[1], &adresse.sin_addr);
 
     socklen_t len = sizeof(adresse);
     
@@ -62,7 +63,8 @@ int main (int argc, char *argv[]) {
 
     if(strcmp(ptr_word[0], "SYN") == 0){
         if(strcmp(ptr_word[1], "ACK") == 0){
-            port_communication = atoi(ptr_word[word]);
+            port_communication = atoi(ptr_word[2]);
+            printf("%d \n", port_communication);
         }else{
             fprintf(stderr, "Erreur handshake \n");
             return(-1);
@@ -79,15 +81,15 @@ int main (int argc, char *argv[]) {
 
     adresse_com.sin_family = AF_INET;
     adresse_com.sin_port= htons(port_communication);
-    adresse_com.sin_addr.s_addr = htonl(INADDR_ANY);
+    inet_aton(argv[1], &adresse_com.sin_addr);
                     
-    if (bind(com_desc, (struct sockaddr*) &adresse_com, sizeof(adresse_com)) == -1) {
-        perror("Bind UDP failed\n");
-        close(com_desc);
-        return -1;
+    printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
+    //sleep(1);
+    int a = sendto(com_desc, (const char *)fileName, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
+    printf("%d \n",a);
+    if(a < 0){
+        perror("erreur");
     }
-
-    sendto(com_desc, (const char *)fileName, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
 
 
     while (1) {
