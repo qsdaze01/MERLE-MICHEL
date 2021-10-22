@@ -17,12 +17,10 @@ int main (int argc, char *argv[]) {
         return -1;
     }
 
-    struct sockaddr_in adresse, adress_udp;
+    struct sockaddr_in adresse_udp;
     fd_set sockets; //creation ensemble de descripteurs
     int port_udp = atoi(argv[1]);
-    int valid= 1;
     int valid_udp = 1;
-    socklen_t alen= sizeof(adress_udp);
     char buffer[RCVSIZE];
 
     //create socket
@@ -30,12 +28,12 @@ int main (int argc, char *argv[]) {
 
     setsockopt(udp_desc, SOL_SOCKET, SO_REUSEADDR, &valid_udp, sizeof(int));
 
-    adress_udp.sin_family = AF_INET;
-    adress_udp.sin_port= htons(port_udp);
-    adress_udp.sin_addr.s_addr = htonl(INADDR_ANY);
+    adresse_udp.sin_family = AF_INET;
+    adresse_udp.sin_port= htons(port_udp);
+    adresse_udp.sin_addr.s_addr = htonl(INADDR_ANY);
 
     //initialize socket
-    if (bind(udp_desc, (struct sockaddr*) &adress_udp, sizeof(adress_udp)) == -1) {
+    if (bind(udp_desc, (struct sockaddr*) &adresse_udp, sizeof(adresse_udp)) == -1) {
         perror("Bind UDP failed\n");
         close(udp_desc);
         return -1;
@@ -51,13 +49,13 @@ int main (int argc, char *argv[]) {
 
         printf("Accepting\n");
         //int client_desc = accept(server_desc, (struct sockaddr*)&client, &alen);
-        int socket_activities = select(5, &sockets, NULL, NULL, NULL); //on surveille uniquement l'envoie de flux vers le serveur
+        select(5, &sockets, NULL, NULL, NULL); //on surveille uniquement l'envoie de flux vers le serveur
 
         if(FD_ISSET(udp_desc, &sockets) == 1){
-            int len = sizeof(adress_udp);
-            ssize_t received = recvfrom(udp_desc, (char *)buffer, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adress_udp, &len);
+            int len = sizeof(adresse_udp);
+            recvfrom(udp_desc, (char *)buffer, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);
             printf("Client > %s", buffer);
-            sendto(udp_desc, (const char *)buffer, RCVSIZE, MSG_CONFIRM, (const struct sockaddr *) &adress_udp, len);
+            sendto(udp_desc, (const char *)buffer, RCVSIZE, MSG_CONFIRM, (const struct sockaddr *) &adresse_udp, len);
             printf("Message resent to the client");
         }
 
