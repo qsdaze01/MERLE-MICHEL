@@ -21,6 +21,7 @@ int main (int argc, char *argv[]) {
     char *handshake_1 = "SYN";
     char handshake_2[RCVSIZE];
     char *handshake_3 = "ACK";
+    char *ptr_word;
 
     //create socket
     int server_desc = socket(AF_INET, SOCK_DGRAM, 0);
@@ -42,7 +43,12 @@ int main (int argc, char *argv[]) {
     sendto(server_desc, (const char *)handshake_1, RCVSIZE, 0, (const struct sockaddr *) &adresse, len);
 
     recvfrom(server_desc, (char *)handshake_2, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse, len);
-    if(handshake_2 == "")
+    printf("1 \n");
+    ptr_word = strtok(handshake_2," ");
+    printf("%s\n", ptr_word);
+    if(ptr_word == "SYN"){
+        printf("ok \n");
+    }
 
     printf("%s \n", handshake_2);
 
