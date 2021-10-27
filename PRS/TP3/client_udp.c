@@ -93,14 +93,12 @@ int main (int argc, char *argv[]) {
 
     char buffer_reception_fichier[RCVSIZE];
     int taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+    char * ack = "ACK";
+    sendto(com_desc, (const char *)ack, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
     while(taille_reception_fichier > 0){
         printf("préOK \n");
         taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
         printf("Ok \n");
-    }
-
-    while (1) {
-        //sendto(server_desc, (const char *)msg, RCVSIZE, 0, (const struct sockaddr *) &adresse, len);
     }
 
     return 0;

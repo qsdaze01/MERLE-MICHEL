@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/select.h>
 #include <sys/time.h>
@@ -12,6 +13,8 @@
 #define RCVSIZE 1024
 
 int main (int argc, char *argv[]) {
+
+    srand(time(NULL));
 
     if(argc != 3){
         perror("Missing args : ./server <UDP_port> <port_communication>");
@@ -49,25 +52,6 @@ int main (int argc, char *argv[]) {
 
     printf("Listen done\n");
 
-    /* PARTIE LECTURE DE FICHER ------ ELLE NE DOIT PAS ÊTRE LA NORMALEMENT !!!!!!!!! */
-    //Problème : il relit certains bit déjà lus
-    /*
-    FILE* fichierClient = fopen("toto.txt", "rb");
-        if(fichierClient == NULL){
-        printf("Erreur fichier \n");
-        return(-1);
-        //perror("Fichier non ouvert");
-    } 
-
-    char buffer_fichier[32];
-    
-    while(feof(fichierClient) == 0){
-        fread((void *) buffer_fichier, 1, 32, fichierClient);
-        printf("%s\n", buffer_fichier);  
-        printf("AAAAAAAAA \n");    
-        //buffer_fichier[0] = '\0';  
-    }    
-    */
     while (1) {
 
         //on active les bits correspondants aux descripteurs des sockets d'écoute
@@ -116,16 +100,29 @@ int main (int argc, char *argv[]) {
                         }
 
                         char buffer_fichier[RCVSIZE];
-
+                        int num_seq = rand();
                         while(feof(fichierClient) == 0){
-                            fread((void *) buffer_fichier, 1, RCVSIZE, fichierClient);
+                            fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
+
+                            char seq[10];
+                            sprintf(seq, "%d", num_seq);
+                            strcat(buffer_fichier, seq);
+
                             printf("%s\n", buffer_fichier);
-                            //printf("----------- \n");
                             int taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
                             printf("Ok \n");
+
                             if(taille_envoi_fichier < 0){
                                 perror("Erreur envoi fichier");
                             }
+                            char ack[RCVSIZE];
+                            recvfrom(com_desc, (char *)ack, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+                            if(strcmp(ack, "ACK") != 0){
+                                printf("pas de ack reçu \n");
+                                return(-1);
+                            }
+                            printf("ack reçu \n");
+                            num_seq++;
                         }
 
                         //On tue le process enfant
