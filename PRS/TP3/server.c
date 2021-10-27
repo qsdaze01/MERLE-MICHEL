@@ -49,6 +49,25 @@ int main (int argc, char *argv[]) {
 
     printf("Listen done\n");
 
+    /* PARTIE LECTURE DE FICHER ------ ELLE NE DOIT PAS ÊTRE LA NORMALEMENT !!!!!!!!! */
+    //Problème : il relit certains bit déjà lus
+    /*
+    FILE* fichierClient = fopen("toto.txt", "rb");
+        if(fichierClient == NULL){
+        printf("Erreur fichier \n");
+        return(-1);
+        //perror("Fichier non ouvert");
+    } 
+
+    char buffer_fichier[32];
+    
+    while(feof(fichierClient) == 0){
+        fread((void *) buffer_fichier, 1, 32, fichierClient);
+        printf("%s\n", buffer_fichier);  
+        printf("AAAAAAAAA \n");    
+        //buffer_fichier[0] = '\0';  
+    }    
+    */
     while (1) {
 
         //on active les bits correspondants aux descripteurs des sockets d'écoute
@@ -62,8 +81,7 @@ int main (int argc, char *argv[]) {
             socklen_t len = sizeof(adresse_udp);
             recvfrom(udp_desc, (char *)handshake_1, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);                        
             if(strcmp(handshake_1, "SYN") == 0){
-                printf("OK 1 \n");
-                
+                handshake_1[0] = '\0';
                 int com_desc = socket(AF_INET, SOCK_DGRAM, 0);
                 setsockopt(com_desc, SOL_SOCKET, SO_REUSEADDR, &valid_udp, sizeof(int));
 
@@ -80,25 +98,46 @@ int main (int argc, char *argv[]) {
                 sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);               
                 recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);            
                 if(strcmp(handshake_3, "ACK") == 0){
-                    printf("OK \n");
+                    handshake_3[0] = '\0';
                     pid_t pid_val = fork();
                     printf("%d \n", pid_val);
                     if(pid_val == 0){
-                        printf("fdf\n");
                         close(udp_desc);
                         printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
                         recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
-                        printf("%s\n", fileName);            
+                        printf("%s\n", fileName);
+
+                        /* PARTIE LECTURE DE FICHER */
+                        //Problème : il relit certains bit déjà lus et fin des bits un peu chelou
+                        FILE* fichierClient = fopen(fileName, "rb");
+                            if(fichierClient == NULL){
+                            printf("Erreur fichier \n");
+                            return(-1);
+                        }
+
+                        char buffer_fichier[RCVSIZE];
+
+                        while(feof(fichierClient) == 0){
+                            fread((void *) buffer_fichier, 1, RCVSIZE, fichierClient);
+                            printf("%s\n", buffer_fichier);
+                            //printf("----------- \n");
+                            int taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
+                            printf("Ok \n");
+                            if(taille_envoi_fichier < 0){
+                                perror("Erreur envoi fichier");
+                            }
+                        }
+
+                        //On tue le process enfant
+                        close(com_desc);
+                        return(0);
                     }else{
                         close(com_desc);
                         port_communication++;
                     }
                 }
             }
-
-            printf("Message resent to the client \n");
         }
-
     }
 
     close(udp_desc);

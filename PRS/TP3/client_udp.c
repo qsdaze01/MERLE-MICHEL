@@ -55,7 +55,7 @@ int main (int argc, char *argv[]) {
     //Récupération handshake_2
     ptr_word[word] = strtok(handshake_2," ");
     while(ptr_word[word] != NULL){
-        printf("%s\n", ptr_word[word]);
+        //printf("%s\n", ptr_word[word]);
         word++;
         ptr_word[word] = strtok(NULL, " ");
     }
@@ -64,7 +64,7 @@ int main (int argc, char *argv[]) {
     if(strcmp(ptr_word[0], "SYN") == 0){
         if(strcmp(ptr_word[1], "ACK") == 0){
             port_communication = atoi(ptr_word[2]);
-            printf("%d \n", port_communication);
+            //printf("%d \n", port_communication);
         }else{
             fprintf(stderr, "Erreur handshake \n");
             return(-1);
@@ -85,12 +85,19 @@ int main (int argc, char *argv[]) {
                     
     printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
     //sleep(1);
-    int a = sendto(com_desc, (const char *)fileName, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
-    printf("%d \n",a);
-    if(a < 0){
-        perror("erreur");
+    int taille_fileName = sendto(com_desc, (const char *)fileName, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
+    //printf("%d \n",a);
+    if(taille_fileName < 0){
+        perror("Erreur envoi");
     }
 
+    char buffer_reception_fichier[RCVSIZE];
+    int taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+    while(taille_reception_fichier > 0){
+        printf("préOK \n");
+        taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+        printf("Ok \n");
+    }
 
     while (1) {
         //sendto(server_desc, (const char *)msg, RCVSIZE, 0, (const struct sockaddr *) &adresse, len);
