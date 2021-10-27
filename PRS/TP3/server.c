@@ -27,9 +27,11 @@ int main (int argc, char *argv[]) {
     int port_udp = atoi(argv[1]);
     int port_communication = atoi(argv[2]);
     int valid_udp = 1;
+    int word = 0;
     char handshake_1[RCVSIZE];
     char handshake_2[RCVSIZE] = "SYN ACK ";
     char handshake_3[RCVSIZE];
+    char *ptr_word[RCVSIZE];
     strcat(handshake_2, argv[2]);
     char fileName[RCVSIZE];
 
@@ -106,7 +108,10 @@ int main (int argc, char *argv[]) {
 
                             char seq[10];
                             sprintf(seq, "%d", num_seq);
-                            strcat(buffer_fichier, seq);
+                            for(int i = 0; i < 10; i++){
+                                buffer_fichier[RCVSIZE - 10 + i] = seq[i];
+                            }
+
 
                             printf("%s\n", buffer_fichier);
                             int taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
@@ -117,11 +122,20 @@ int main (int argc, char *argv[]) {
                             }
                             char ack[RCVSIZE];
                             recvfrom(com_desc, (char *)ack, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
-                            if(strcmp(ack, "ACK") != 0){
+                            printf("%s \n", ack);
+                            ptr_word[word] = strtok(ack," ");
+                            while(ptr_word[word] != NULL){
+                                //printf("%s\n", ptr_word[word]);
+                                word++;
+                                ptr_word[word] = strtok(NULL, " ");
+                            }
+                            word = 0;
+
+                            if(strcmp(ptr_word[0], "ACK") != 0){
                                 printf("pas de ack reçu \n");
                                 return(-1);
                             }
-                            printf("ack reçu \n");
+                            printf("ack reçu num_seq = %s \n", ptr_word[1]);
                             num_seq++;
                         }
 
