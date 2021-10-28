@@ -102,12 +102,13 @@ int main (int argc, char *argv[]) {
                         }
 
                         char buffer_fichier[RCVSIZE];
-                        int num_seq = rand();
+                        int num_seq = 0.1*rand();
                         while(feof(fichierClient) == 0){
                             fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
 
                             char seq[10];
                             sprintf(seq, "%d", num_seq);
+                            printf("%s \n", seq);
                             for(int i = 0; i < 10; i++){
                                 buffer_fichier[RCVSIZE - 10 + i] = seq[i];
                             }
