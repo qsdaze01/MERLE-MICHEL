@@ -14,13 +14,12 @@
 
 int main (int argc, char *argv[]) {
 
-    srand(time(NULL));
-
     if(argc != 3){
         perror("Missing args : ./server <UDP_port> <port_communication>");
         return -1;
     }
 
+    /* Déclaration des variables */
     struct sockaddr_in adresse_udp;
     struct sockaddr_in adresse_com;
     fd_set sockets; //creation ensemble de descripteurs
@@ -34,8 +33,9 @@ int main (int argc, char *argv[]) {
     char *ptr_word[RCVSIZE];
     strcat(handshake_2, argv[2]);
     char fileName[RCVSIZE];
+    srand(time(NULL));
 
-    //create socket
+    /* Création de la socket de connexion au serveur */
     int udp_desc = socket(AF_INET, SOCK_DGRAM, 0);
 
     setsockopt(udp_desc, SOL_SOCKET, SO_REUSEADDR, &valid_udp, sizeof(int));
@@ -44,27 +44,28 @@ int main (int argc, char *argv[]) {
     adresse_udp.sin_port= htons(port_udp);
     adresse_udp.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    //initialize socket
+    /* Initialisation de la socket */
     if (bind(udp_desc, (struct sockaddr*) &adresse_udp, sizeof(adresse_udp)) == -1) {
         perror("Bind UDP failed\n");
         close(udp_desc);
         return -1;
     }
-    FD_ZERO(&sockets); // on initialise à zéro le set de descripteurs
 
-    printf("Listen done\n");
+    FD_ZERO(&sockets); // on initialise à zéro le set de descripteurs
 
     while (1) {
 
+        /* Sélection de la socket */
         //on active les bits correspondants aux descripteurs des sockets d'écoute
         FD_SET(udp_desc, &sockets);
 
         printf("Accepting\n");
-        //int client_desc = accept(server_desc, (struct sockaddr*)&client, &alen);
         select(5, &sockets, NULL, NULL, NULL); //on surveille uniquement l'envoie de flux vers le serveur
 
         if(FD_ISSET(udp_desc, &sockets) == 1){
             socklen_t len = sizeof(adresse_udp);
+
+            /* Handshake */
             recvfrom(udp_desc, (char *)handshake_1, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);                        
             if(strcmp(handshake_1, "SYN") == 0){
                 handshake_1[0] = '\0';
@@ -88,6 +89,8 @@ int main (int argc, char *argv[]) {
                     pid_t pid_val = fork();
                     printf("%d \n", pid_val);
                     if(pid_val == 0){
+
+                        /* Process fils - communication avec le client */
                         close(udp_desc);
                         printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
                         recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
@@ -113,7 +116,6 @@ int main (int argc, char *argv[]) {
                                 buffer_fichier[RCVSIZE - 10 + i] = seq[i];
                             }
 
-
                             printf("%s\n", buffer_fichier);
                             int taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
                             printf("Ok \n");
@@ -126,7 +128,6 @@ int main (int argc, char *argv[]) {
                             printf("%s \n", ack);
                             ptr_word[word] = strtok(ack," ");
                             while(ptr_word[word] != NULL){
-                                //printf("%s\n", ptr_word[word]);
                                 word++;
                                 ptr_word[word] = strtok(NULL, " ");
                             }
@@ -144,6 +145,8 @@ int main (int argc, char *argv[]) {
                         close(com_desc);
                         return(0);
                     }else{
+
+                        /* Process père - on reboucle pour écouter un autre client */
                         close(com_desc);
                         port_communication++;
                     }

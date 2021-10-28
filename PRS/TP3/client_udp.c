@@ -100,9 +100,7 @@ int main (int argc, char *argv[]) {
     char ack[RCVSIZE] = "ACK ";
     for(int i = 0; i < 10; i++){
         num_seq[i] = buffer_reception_fichier[RCVSIZE - 10 + i];
-        //printf("%s \n", num_seq);
     }
-    //printf("%c \n", num_seq[10]);
 
     printf("%s \n", num_seq);
 
