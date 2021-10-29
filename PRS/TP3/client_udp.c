@@ -7,7 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define RCVSIZE 1024
+#define RCVSIZE 32
 
 int main (int argc, char *argv[]) {
 
@@ -102,7 +102,8 @@ int main (int argc, char *argv[]) {
         num_seq[i] = buffer_reception_fichier[RCVSIZE - 10 + i];
     }
 
-    printf("%s \n", num_seq);
+    //printf("%s \n", num_seq);
+    printf("Réception fichier : %s \n", buffer_reception_fichier);
 
     strcat(ack, num_seq);
     //sleep(10);
@@ -111,7 +112,8 @@ int main (int argc, char *argv[]) {
         char ack[RCVSIZE] = "ACK ";
         //printf("préOK \n");
         taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
-        printf("Ok \n");
+        printf("Réception fichier : %s \n", buffer_reception_fichier);
+        //printf("Ok \n");
 
         for(int i = 0; i < 10; i++){
             num_seq[i] = buffer_reception_fichier[RCVSIZE - 10 + i];
@@ -119,7 +121,7 @@ int main (int argc, char *argv[]) {
         //printf("SEQ : %s \n", num_seq);
         strcat(ack, num_seq);
         sendto(com_desc, (const char *)ack, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
-        printf("ACK : %s \n", ack);
+        //printf("ACK : %s \n", ack);
     }
 
     return 0;

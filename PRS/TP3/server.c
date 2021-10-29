@@ -10,7 +10,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define RCVSIZE 1024
+#define RCVSIZE 32
 
 int main (int argc, char *argv[]) {
 
@@ -89,19 +89,19 @@ int main (int argc, char *argv[]) {
                 recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);
                 end = clock();
                 RTT = 4*((double)(end-begin)/CLOCKS_PER_SEC);
-                printf("RTT : %f \n", RTT);
+                //printf("RTT : %f \n", RTT);
 
                 if(strcmp(handshake_3, "ACK") == 0){
                     handshake_3[0] = '\0';
                     pid_t pid_val = fork();
-                    printf("%d \n", pid_val);
+                    //printf("%d \n", pid_val);
                     if(pid_val == 0){
 
                         /* Process fils - communication avec le client */
                         close(udp_desc);
-                        printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
+                        //printf("%d %s %d %d \n", com_desc, inet_ntoa(adresse_com.sin_addr), ntohs(adresse_com.sin_port),len);
                         recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
-                        printf("%s\n", fileName);
+                        //printf("%s\n", fileName);
 
                         /* Ajout timeout */
                         struct timeval tv;
@@ -131,6 +131,8 @@ int main (int argc, char *argv[]) {
                         while(feof(fichierClient) == 0 || msg_en_cours != 0){
 
                             while(msg_en_cours < window && feof(fichierClient) == 0){
+
+                                memset(buffer_fichier, 0, RCVSIZE);
                                 fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
 
                                 sprintf(seq, "%d", num_seq);
@@ -140,7 +142,7 @@ int main (int argc, char *argv[]) {
                                 }
                                 num_seq++;
 
-                                //printf("%s\n", buffer_fichier);
+                                printf("Transmission fichier fichier : %s\n", buffer_fichier);
 
                                 begin = clock();
                                 taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
@@ -187,7 +189,7 @@ int main (int argc, char *argv[]) {
                                 return(-1);
                             }
 
-                            printf("ack reçu num_seq = %s \n", ptr_word[1]);
+                            //printf("ack reçu num_seq = %s \n", ptr_word[1]);
                             msg_en_cours--;
                         }
 
