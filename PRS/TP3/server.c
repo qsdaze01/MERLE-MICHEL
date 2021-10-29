@@ -27,12 +27,15 @@ int main (int argc, char *argv[]) {
     int port_communication = atoi(argv[2]);
     int valid_udp = 1;
     int word = 0;
+    double RTT = 0;
     char handshake_1[RCVSIZE];
     char handshake_2[RCVSIZE] = "SYN ACK ";
     char handshake_3[RCVSIZE];
     char *ptr_word[RCVSIZE];
     strcat(handshake_2, argv[2]);
     char fileName[RCVSIZE];
+    clock_t begin = clock();
+    clock_t end = clock();
     srand(time(NULL));
 
     /* Création de la socket de connexion au serveur */
@@ -81,9 +84,13 @@ int main (int argc, char *argv[]) {
                     close(com_desc);
                     return -1;
                 }
-
+                begin = clock();
                 sendto(udp_desc, (char *)handshake_2, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_udp, len);               
-                recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);            
+                recvfrom(udp_desc, (char *)handshake_3, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_udp, &len);
+                end = clock();
+                RTT = 4*((double)(end-begin)/CLOCKS_PER_SEC);
+                printf("RTT : %f \n", RTT);
+
                 if(strcmp(handshake_3, "ACK") == 0){
                     handshake_3[0] = '\0';
                     pid_t pid_val = fork();
@@ -96,6 +103,14 @@ int main (int argc, char *argv[]) {
                         recvfrom(com_desc, (char *)fileName, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
                         printf("%s\n", fileName);
 
+                        /* Ajout timeout */
+                        struct timeval tv;
+                        tv.tv_sec = 0;
+                        tv.tv_usec = (int) (100000*RTT);
+                        if (setsockopt(com_desc, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0) {
+                            perror("Error");
+                        }
+
                         /* PARTIE LECTURE DE FICHER */
                         //Problème : il relit certains bit déjà lus et fin des bits un peu chelou
                         FILE* fichierClient = fopen(fileName, "rb");
@@ -106,6 +121,7 @@ int main (int argc, char *argv[]) {
 
                         char buffer_fichier[RCVSIZE];
                         int num_seq = 0.1*rand();
+
                         while(feof(fichierClient) == 0){
                             fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
 
@@ -117,15 +133,22 @@ int main (int argc, char *argv[]) {
                             }
 
                             printf("%s\n", buffer_fichier);
+
+
                             int taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
-                            printf("Ok \n");
+                            //printf("Ok \n");
 
                             if(taille_envoi_fichier < 0){
                                 perror("Erreur envoi fichier");
                             }
                             char ack[RCVSIZE];
-                            recvfrom(com_desc, (char *)ack, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
-                            printf("%s \n", ack);
+
+                            if(recvfrom(com_desc, (char *) ack , RCVSIZE, 0, (struct sockaddr *) &adresse_com, &len) < 0){
+                                //timeout reached
+                                printf("Timout reached. Resending segment\n");
+                            }
+                            //taille_reception = recvfrom(com_desc, (char *)ack, RCVSIZE, MSG_DONTWAIT, (struct sockaddr *) &adresse_com, &len);
+
                             ptr_word[word] = strtok(ack," ");
                             while(ptr_word[word] != NULL){
                                 word++;
@@ -137,6 +160,8 @@ int main (int argc, char *argv[]) {
                                 printf("pas de ack reçu \n");
                                 return(-1);
                             }
+                            //RTT = 4*difftime(end, begin);
+
                             printf("ack reçu num_seq = %s \n", ptr_word[1]);
                             num_seq++;
                         }

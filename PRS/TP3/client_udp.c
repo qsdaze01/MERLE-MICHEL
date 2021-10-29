@@ -105,6 +105,7 @@ int main (int argc, char *argv[]) {
     printf("%s \n", num_seq);
 
     strcat(ack, num_seq);
+    //sleep(10);
     sendto(com_desc, (const char *)ack, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
     while(taille_reception_fichier > 0){
         *ack = "ACK";
