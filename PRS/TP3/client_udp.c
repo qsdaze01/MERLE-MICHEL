@@ -108,19 +108,18 @@ int main (int argc, char *argv[]) {
     //sleep(10);
     sendto(com_desc, (const char *)ack, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
     while(taille_reception_fichier > 0){
-        ack[0] = 'A';
-        ack[1] = 'C';
-        ack[2] = 'K';
-        ack[3] = ' ';
-        printf("préOK \n");
+        char ack[RCVSIZE] = "ACK ";
+        //printf("préOK \n");
         taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
         printf("Ok \n");
 
         for(int i = 0; i < 10; i++){
             num_seq[i] = buffer_reception_fichier[RCVSIZE - 10 + i];
         }
+        //printf("SEQ : %s \n", num_seq);
         strcat(ack, num_seq);
         sendto(com_desc, (const char *)ack, RCVSIZE, 0, (const struct sockaddr *) &adresse_com, len);
+        printf("ACK : %s \n", ack);
     }
 
     return 0;

@@ -134,13 +134,13 @@ int main (int argc, char *argv[]) {
                                 fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
 
                                 sprintf(seq, "%d", num_seq);
-                                printf("%s \n", seq);
+                                //printf("%s \n", seq);
                                 for(int i = 0; i < 10; i++){
                                     buffer_fichier[RCVSIZE - 10 + i] = seq[i];
                                 }
                                 num_seq++;
 
-                                printf("%s\n", buffer_fichier);
+                                //printf("%s\n", buffer_fichier);
 
                                 begin = clock();
                                 taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
