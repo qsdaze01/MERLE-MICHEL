@@ -121,33 +121,59 @@ int main (int argc, char *argv[]) {
 
                         char buffer_fichier[RCVSIZE];
                         int num_seq = 0.1*rand();
+                        int timeout = 0;
+                        int window = 1;
+                        int msg_en_cours = 0;
+                        int taille_envoi_fichier;
+                        char ack[RCVSIZE];
+                        char seq[10];
 
-                        while(feof(fichierClient) == 0){
-                            fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
+                        while(feof(fichierClient) == 0 || msg_en_cours != 0){
 
-                            char seq[10];
-                            sprintf(seq, "%d", num_seq);
-                            printf("%s \n", seq);
-                            for(int i = 0; i < 10; i++){
-                                buffer_fichier[RCVSIZE - 10 + i] = seq[i];
+                            while(msg_en_cours < window && feof(fichierClient) == 0){
+                                fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
+
+                                sprintf(seq, "%d", num_seq);
+                                printf("%s \n", seq);
+                                for(int i = 0; i < 10; i++){
+                                    buffer_fichier[RCVSIZE - 10 + i] = seq[i];
+                                }
+                                num_seq++;
+
+                                printf("%s\n", buffer_fichier);
+
+                                begin = clock();
+                                taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
+
+                                if(taille_envoi_fichier < 0){
+                                    perror("Erreur envoi fichier");
+                                }
+                                msg_en_cours++;
                             }
-
-                            printf("%s\n", buffer_fichier);
-
-
-                            int taille_envoi_fichier = sendto(com_desc, (char *)buffer_fichier, RCVSIZE, MSG_CONFIRM, (struct sockaddr *) &adresse_com, len);
-                            //printf("Ok \n");
-
-                            if(taille_envoi_fichier < 0){
-                                perror("Erreur envoi fichier");
-                            }
-                            char ack[RCVSIZE];
 
                             if(recvfrom(com_desc, (char *) ack , RCVSIZE, 0, (struct sockaddr *) &adresse_com, &len) < 0){
-                                //timeout reached
                                 printf("Timout reached. Resending segment\n");
+                                timeout = 1;
                             }
-                            //taille_reception = recvfrom(com_desc, (char *)ack, RCVSIZE, MSG_DONTWAIT, (struct sockaddr *) &adresse_com, &len);
+                            end = clock();
+
+                            /* Mise à jour du RTT */
+                            if(timeout == 0){
+                                RTT = RTT - 0.1*(RTT - 4*((double)(end-begin)/CLOCKS_PER_SEC));
+                                tv.tv_usec = (int) (100000*RTT);
+                                if (setsockopt(com_desc, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0) {
+                                    perror("Error");
+                                }
+                                window = window * 2;
+                            }else{
+                                RTT = 4*((double)(end-begin)/CLOCKS_PER_SEC);
+                                tv.tv_usec = (int) (100000*RTT);
+                                if (setsockopt(com_desc, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0) {
+                                    perror("Error");
+                                }
+                                timeout = 0;
+                                window = 1;
+                            }
 
                             ptr_word[word] = strtok(ack," ");
                             while(ptr_word[word] != NULL){
@@ -160,10 +186,9 @@ int main (int argc, char *argv[]) {
                                 printf("pas de ack reçu \n");
                                 return(-1);
                             }
-                            //RTT = 4*difftime(end, begin);
 
                             printf("ack reçu num_seq = %s \n", ptr_word[1]);
-                            num_seq++;
+                            msg_en_cours--;
                         }
 
                         //On tue le process enfant
