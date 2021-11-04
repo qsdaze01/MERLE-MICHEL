@@ -95,9 +95,22 @@ int main (int argc, char *argv[]) {
 
     /* Réception du fichier */
     char buffer_reception_fichier[RCVSIZE];
-    int taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
     char num_seq[10];
     char ack[RCVSIZE] = "ACK ";
+    FILE * fichier_ecriture = fopen("./toto1.txt", "ab+");
+
+    if(fichier_ecriture == NULL){
+        printf("Problème ouverture \n");
+        return(-1);
+    }
+
+    int taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+
+    if(fwrite(buffer_reception_fichier, RCVSIZE, 1, fichier_ecriture) != 1){
+        perror("problème écriture");
+        //printf("Erreur écriture \n");
+    }
+
     for(int i = 0; i < 10; i++){
         num_seq[i] = buffer_reception_fichier[RCVSIZE - 10 + i];
     }
@@ -112,6 +125,9 @@ int main (int argc, char *argv[]) {
         char ack[RCVSIZE] = "ACK ";
         //printf("préOK \n");
         taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+
+        //fwrite((void *) buffer_reception_fichier, 1, RCVSIZE - 10, fichier_ecriture);
+
         printf("Réception fichier : %s \n", buffer_reception_fichier);
         //printf("Ok \n");
 

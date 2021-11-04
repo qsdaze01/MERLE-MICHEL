@@ -123,6 +123,8 @@ int main (int argc, char *argv[]) {
                         int num_seq = 0.1*rand();
                         int timeout = 0;
                         int window = 1;
+                        int slowstart = 1;
+                        int count_congestion_avoidance = 0;
                         int msg_en_cours = 0;
                         int taille_envoi_fichier;
                         char ack[RCVSIZE];
@@ -136,7 +138,7 @@ int main (int argc, char *argv[]) {
                                 fread((void *) buffer_fichier, 1, RCVSIZE - 10, fichierClient);
 
                                 sprintf(seq, "%d", num_seq);
-                                //printf("%s \n", seq);
+                                printf("%s \n", seq);
                                 for(int i = 0; i < 10; i++){
                                     buffer_fichier[RCVSIZE - 10 + i] = seq[i];
                                 }
@@ -166,7 +168,15 @@ int main (int argc, char *argv[]) {
                                 if (setsockopt(com_desc, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0) {
                                     perror("Error");
                                 }
-                                window = window * 2;
+                                if(slowstart == 1){
+                                    window = window + 1;
+                                }else{
+                                    count_congestion_avoidance++;
+                                    if(count_congestion_avoidance == window){
+                                        window++;
+                                        count_congestion_avoidance = 0;
+                                    }
+                                }
                             }else{
                                 RTT = 4*((double)(end-begin)/CLOCKS_PER_SEC);
                                 tv.tv_usec = (int) (100000*RTT);
@@ -174,6 +184,8 @@ int main (int argc, char *argv[]) {
                                     perror("Error");
                                 }
                                 timeout = 0;
+                                slowstart = 0;
+                                count_congestion_avoidance = 0;
                                 window = 1;
                             }
 
