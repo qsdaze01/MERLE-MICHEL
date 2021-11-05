@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -10,44 +9,87 @@ import (
 
 func main() {
 	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide a host:port string")
+	if len(arguments) == 2 {
+		fmt.Println("args : address port")
 		return
 	}
-	CONNECT := arguments[1]
 
-	s, err := net.ResolveUDPAddr("udp4", CONNECT)
-	c, err := net.DialUDP("udp4", nil, s)
+	connectionParameters := arguments[1] + ":" + arguments[2]
+
+	addressPort, err := net.ResolveUDPAddr("udp4", connectionParameters)
+	socketConnect, err := net.DialUDP("udp4", nil, addressPort)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Printf("The UDP server is %s\n", c.RemoteAddr().String())
-	defer c.Close()
+	fmt.Printf("The UDP server is %s\n", socketConnect.RemoteAddr().String())
 
-	for {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print(">> ")
-		text, _ := reader.ReadString('\n')
-		data := []byte(text + "\n")
-		_, err = c.Write(data)
-		if strings.TrimSpace(string(data)) == "STOP" {
-			fmt.Println("Exiting UDP client!")
-			return
-		}
+	handshake1 := []byte("SYN")
+	_, err = socketConnect.Write(handshake1)
 
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		buffer := make([]byte, 1024)
-		n, _, err := c.ReadFromUDP(buffer)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Printf("Reply: %s\n", string(buffer[0:n]))
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
+
+	handshake2 := make([]byte, 1024)
+	lengthHandshake2, _, err := socketConnect.ReadFromUDP(handshake2)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	splitHandshake2 := strings.Split(string(handshake2[0:lengthHandshake2]), " ")
+
+	if splitHandshake2[0] == "SYN_ACK" {
+		communicationParameters := arguments[1] + ":" + splitHandshake2[1]
+		fmt.Println(communicationParameters)
+		communicationAddressPort, err := net.ResolveUDPAddr("udp4", communicationParameters)
+		socketCommunication, err := net.DialUDP("udp4", nil, communicationAddressPort)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		defer socketCommunication.Close()
+
+		handshake3 := []byte("ACK")
+		_, err = socketConnect.Write(handshake3)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = socketConnect.Close()
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		fmt.Println("Handshaked !")
+
+		filename := []byte("test.pdf")
+		_, err = socketCommunication.Write(filename)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		/*buffer := make([]byte, 1024)
+		n, _, err := socketCommunication.ReadFromUDP(buffer)
+		fmt.Println("where is wsh ?")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(string(buffer[0:n]))*/
+
+	}
+
 }

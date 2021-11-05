@@ -6,7 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,45 +14,97 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
+func communicate(wg *sync.WaitGroup, clientAddress *net.UDPAddr, port string) {
+	defer wg.Done()
+
+	portCommunication := ":" + port
+	communicationParameters, err := net.ResolveUDPAddr("udp4", portCommunication)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	socketCommunication, err := net.ListenUDP("udp4", communicationParameters)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	defer socketCommunication.Close()
+
+	filenameClient := make([]byte, 1024)
+	lengthFilenameClient, _, err := socketCommunication.ReadFromUDP(filenameClient)
+	fmt.Println(string(filenameClient[0:lengthFilenameClient]))
+}
+
 func main() {
-	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide a port number!")
-		return
-	}
-	PORT := ":" + arguments[1]
-
-	s, err := net.ResolveUDPAddr("udp4", PORT)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	connection, err := net.ListenUDP("udp4", s)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	defer connection.Close()
-	buffer := make([]byte, 1024)
 	rand.Seed(time.Now().Unix())
 
+	var wg sync.WaitGroup
+
+	arguments := os.Args
+	if len(arguments) == 2 {
+		fmt.Println("args : port_connection port_communication")
+		return
+	}
+	portConnection := ":" + arguments[1]
+
+	connectionParameters, err := net.ResolveUDPAddr("udp4", portConnection)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	socketConnect, err := net.ListenUDP("udp4", connectionParameters)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	defer socketConnect.Close()
+
+	portCommunication, err := strconv.Atoi(arguments[2])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	for {
-		n, addr, err := connection.ReadFromUDP(buffer)
-		fmt.Print("-> ", string(buffer[0:n-1]))
+		handshake1 := make([]byte, 1024)
+		lengthHandshake1, clientAddress, err := socketConnect.ReadFromUDP(handshake1)
 
-		if strings.TrimSpace(string(buffer[0:n])) == "STOP" {
-			fmt.Println("Exiting UDP server!")
-			return
-		}
+		if string(handshake1[0:lengthHandshake1]) == "SYN" {
+			handshake2 := "SYN_ACK " + strconv.Itoa(portCommunication)
+			_, err = socketConnect.WriteToUDP([]byte(handshake2), clientAddress)
 
-		data := []byte(strconv.Itoa(random(1, 1001)))
-		fmt.Printf("data: %s\n", string(data))
-		_, err = connection.WriteToUDP(data, addr)
-		if err != nil {
-			fmt.Println(err)
-			return
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			fmt.Println("SYN_ACK")
+
+			//go routine avec socket communication ici
+			wg.Add(1)
+			go communicate(&wg, clientAddress, strconv.Itoa(portCommunication))
+
+			handshake3 := make([]byte, 1024)
+			lengthHandshake3, _, err := socketConnect.ReadFromUDP(handshake3)
+
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			if string(handshake3[0:lengthHandshake3]) == "ACK" {
+				fmt.Println("Handshaked !")
+			}
+
+			portCommunication++
 		}
 	}
+
+	wg.Wait()
+
 }
