@@ -11,3 +11,12 @@
 - Tester congestion avoidance
 - Faire le threshold 
 - Tester avec un gros fichier
+
+
+## Transformer le truc en GO
+
+
+## Astuce FLM
+
+- On aura peut-être pas à fragmenter de notre côté, on envoie un gros paquet en TCP et on laisse Ethernet fragmenter de son côté
+
