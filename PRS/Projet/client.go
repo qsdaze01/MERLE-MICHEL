@@ -73,12 +73,40 @@ func main() {
 
 		fmt.Println("Handshaked !")
 
-		filename := []byte("test.pdf")
+		filename := []byte("test.txt")
 		_, err = socketCommunication.Write(filename)
 
 		if err != nil {
 			fmt.Println(err)
 			return
+		}
+
+		fileBuffer := make([]byte, 32)
+		file, err := os.OpenFile("received.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		for {
+			lengthFileBuffer, _, err := socketCommunication.ReadFromUDP(fileBuffer)
+
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			if string(fileBuffer[0:lengthFileBuffer]) == "EOF" {
+				break //End of File
+			}
+
+			_, err = file.Write(fileBuffer)
+
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 		}
 
 		/*buffer := make([]byte, 1024)

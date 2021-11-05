@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -36,6 +37,39 @@ func communicate(wg *sync.WaitGroup, clientAddress *net.UDPAddr, port string) {
 	filenameClient := make([]byte, 1024)
 	lengthFilenameClient, _, err := socketCommunication.ReadFromUDP(filenameClient)
 	fmt.Println(string(filenameClient[0:lengthFilenameClient]))
+
+	file, err := os.Open(string(filenameClient[0:lengthFilenameClient]))
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for {
+		fileBuffer := make([]byte, 32)
+		_, errEof := file.Read(fileBuffer)
+
+		_, err := socketCommunication.WriteToUDP(fileBuffer, clientAddress)
+
+		if errEof == io.EOF {
+			eof := []byte("EOF")
+			_, err := socketCommunication.WriteToUDP(eof, clientAddress)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			break
+		} else if errEof != nil {
+			fmt.Println(errEof)
+			return
+		}
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
 }
 
 func main() {
