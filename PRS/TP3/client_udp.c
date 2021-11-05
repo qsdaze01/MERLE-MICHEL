@@ -97,26 +97,29 @@ int main (int argc, char *argv[]) {
     char buffer_reception_fichier[RCVSIZE];
     char num_seq[10];
     char ack[RCVSIZE] = "ACK ";
-    FILE * fichier_ecriture = fopen("./toto1.txt", "ab+");
+    FILE * fichier_ecriture = fopen("./toto1.txt", "w+");
 
     if(fichier_ecriture == NULL){
         printf("Problème ouverture \n");
         return(-1);
     }
-
     int taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
+    printf("Réception fichier : %s \n", buffer_reception_fichier);
 
-    if(fwrite(buffer_reception_fichier, RCVSIZE, 1, fichier_ecriture) != 1){
+    printf("%ld \n",fwrite(buffer_reception_fichier, RCVSIZE - 10 , 1, fichier_ecriture));
+    fclose(fichier_ecriture);
+
+    /*if(fwrite(buffer_reception_fichier, RCVSIZE, 1, fichier_ecriture) < 0){
         perror("problème écriture");
         //printf("Erreur écriture \n");
-    }
+    }*/
 
     for(int i = 0; i < 10; i++){
         num_seq[i] = buffer_reception_fichier[RCVSIZE - 10 + i];
     }
 
     //printf("%s \n", num_seq);
-    printf("Réception fichier : %s \n", buffer_reception_fichier);
+    //printf("Réception fichier : %s \n", buffer_reception_fichier);
 
     strcat(ack, num_seq);
     //sleep(10);
@@ -126,7 +129,12 @@ int main (int argc, char *argv[]) {
         //printf("préOK \n");
         taille_reception_fichier = recvfrom(com_desc, buffer_reception_fichier, RCVSIZE, MSG_WAITALL, (struct sockaddr *) &adresse_com, &len);
 
-        //fwrite((void *) buffer_reception_fichier, 1, RCVSIZE - 10, fichier_ecriture);
+        //fwrite((void *) buffer_reception_fichier, RCVSIZE, 1, fichier_ecriture);
+
+        if(fwrite(buffer_reception_fichier, RCVSIZE - 10, 1, fichier_ecriture) < 0){
+            perror("problème écriture");
+            //printf("Erreur écriture \n");
+        }
 
         printf("Réception fichier : %s \n", buffer_reception_fichier);
         //printf("Ok \n");
