@@ -101,7 +101,7 @@ func main() {
 				break //End of File
 			}
 
-			_, err = file.Write(fileBuffer)
+			_, err = file.Write(fileBuffer) //TODO: pb ici quand une partie des cases du buffer sont vides (fin de fichier) il write des caractères NUL dans le fichier il faut trouver une condition
 
 			if err != nil {
 				fmt.Println(err)
