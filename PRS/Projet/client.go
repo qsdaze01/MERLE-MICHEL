@@ -101,9 +101,7 @@ func main() {
 				break //End of File
 			}
 
-			//fmt.Println(string(fileBuffer[0:lengthFileBuffer]))
-
-			_, err = file.Write(fileBuffer) //TODO: quand on arrive à la fin du fichier et que les bits à la fin du buffers sont nuls, ça print NUL dans le fichier, c'est moche il faut trouver une condition pour que ça écrive pas
+			_, err = file.Write(fileBuffer)
 
 			if err != nil {
 				fmt.Println(err)

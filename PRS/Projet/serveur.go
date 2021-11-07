@@ -15,7 +15,7 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-func communicate(wg *sync.WaitGroup, port string) {
+func communicate(wg *sync.WaitGroup, clientAddress *net.UDPAddr, port string) {
 	defer wg.Done()
 
 	portCommunication := ":" + port
@@ -35,7 +35,7 @@ func communicate(wg *sync.WaitGroup, port string) {
 	defer socketCommunication.Close()
 
 	filenameClient := make([]byte, 1024)
-	lengthFilenameClient, clientAddress, err := socketCommunication.ReadFromUDP(filenameClient)
+	lengthFilenameClient, _, err := socketCommunication.ReadFromUDP(filenameClient)
 	fmt.Println(string(filenameClient[0:lengthFilenameClient]))
 
 	file, err := os.Open(string(filenameClient[0:lengthFilenameClient]))
@@ -121,7 +121,7 @@ func main() {
 
 			//go routine avec socket communication ici
 			wg.Add(1)
-			go communicate(&wg, strconv.Itoa(portCommunication))
+			go communicate(&wg, clientAddress, strconv.Itoa(portCommunication))
 
 			handshake3 := make([]byte, 1024)
 			lengthHandshake3, _, err := socketConnect.ReadFromUDP(handshake3)
