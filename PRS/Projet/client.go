@@ -81,6 +81,7 @@ func main() {
 			return
 		}
 
+		message := make([]byte, 42)
 		fileBuffer := make([]byte, 32)
 		file, err := os.OpenFile("received.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 
@@ -90,14 +91,19 @@ func main() {
 		}
 
 		for {
-			lengthFileBuffer, _, err := socketCommunication.ReadFromUDP(fileBuffer)
+			lengthFileBuffer, _, err := socketCommunication.ReadFromUDP(message)
+			for i := range fileBuffer {
+				fileBuffer[i] = message[i]
+			}
+
+			fmt.Println(string(message))
 
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 
-			if string(fileBuffer[0:lengthFileBuffer]) == "EOF" {
+			if string(message[0:lengthFileBuffer]) == "EOF" {
 				break //End of File
 			}
 

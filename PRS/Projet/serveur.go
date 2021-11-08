@@ -45,11 +45,23 @@ func communicate(wg *sync.WaitGroup, port string) {
 		return
 	}
 
+	seq := []byte(strconv.Itoa(random(0, 2000000)))
+	numSeq, err := strconv.Atoi(string(seq))
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	for {
 		fileBuffer := make([]byte, 32)
+		for i := range fileBuffer {
+			fileBuffer[i] = 0
+		}
 		_, errEof := file.Read(fileBuffer)
-
-		_, err := socketCommunication.WriteToUDP(fileBuffer, clientAddress)
+		message := append(fileBuffer, seq...)
+		//fmt.Println(message)
+		_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
 		if errEof == io.EOF {
 			eof := []byte("EOF")
@@ -68,6 +80,8 @@ func communicate(wg *sync.WaitGroup, port string) {
 			fmt.Println(err)
 			return
 		}
+		numSeq++
+		seq = []byte(strconv.Itoa(numSeq))
 	}
 
 }
