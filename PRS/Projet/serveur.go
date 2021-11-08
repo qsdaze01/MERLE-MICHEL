@@ -80,6 +80,21 @@ func communicate(wg *sync.WaitGroup, port string) {
 			fmt.Println(err)
 			return
 		}
+
+		messageAck := make([]byte, 32)
+
+		_, _, err = socketCommunication.ReadFromUDP(messageAck)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		if string(messageAck[0:3]) != "ACK" {
+			fmt.Println("Pas de ACK reçu")
+			return
+		}
+
 		numSeq++
 		seq = []byte(strconv.Itoa(numSeq))
 	}
@@ -152,7 +167,5 @@ func main() {
 			portCommunication++
 		}
 	}
-
 	wg.Wait()
-
 }

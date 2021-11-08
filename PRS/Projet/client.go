@@ -91,7 +91,7 @@ func main() {
 		}
 
 		for {
-			lengthFileBuffer, _, err := socketCommunication.ReadFromUDP(message)
+			lengthMessage, _, err := socketCommunication.ReadFromUDP(message)
 			for i := range fileBuffer {
 				fileBuffer[i] = message[i]
 			}
@@ -102,8 +102,21 @@ func main() {
 				fmt.Println(err)
 				return
 			}
+			ack := []byte("ACK ")
+			tabSeq := make([]byte, 10)
+			for i := 0; i < 10; i++ {
+				tabSeq[i] = message[i+len(fileBuffer)]
+			}
 
-			if string(message[0:lengthFileBuffer]) == "EOF" {
+			messageAck := append(ack, tabSeq...)
+			_, err = socketCommunication.Write(messageAck)
+
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			if string(message[0:lengthMessage]) == "EOF" {
 				break //End of File
 			}
 
@@ -114,16 +127,5 @@ func main() {
 				return
 			}
 		}
-
-		/*buffer := make([]byte, 1024)
-		n, _, err := socketCommunication.ReadFromUDP(buffer)
-		fmt.Println("where is wsh ?")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Println(string(buffer[0:n]))*/
-
 	}
-
 }
