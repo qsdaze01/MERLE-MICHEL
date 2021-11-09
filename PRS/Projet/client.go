@@ -91,12 +91,12 @@ func main() {
 		}
 
 		for {
-			lengthMessage, _, err := socketCommunication.ReadFromUDP(message)
+			_, _, err := socketCommunication.ReadFromUDP(message)
 			for i := range fileBuffer {
 				fileBuffer[i] = message[i]
 			}
 
-			fmt.Println(string(message))
+			//fmt.Println(string(message))
 
 			if err != nil {
 				fmt.Println(err)
@@ -116,7 +116,9 @@ func main() {
 				return
 			}
 
-			if string(message[0:lengthMessage]) == "EOF" {
+			fmt.Println("Buffer :" + string(fileBuffer))
+			if string(fileBuffer[0:3]) == "EOF" {
+				fmt.Println("bouh")
 				break //End of File
 			}
 

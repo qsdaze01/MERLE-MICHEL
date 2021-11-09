@@ -64,8 +64,15 @@ func communicate(wg *sync.WaitGroup, port string) {
 		_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
 		if errEof == io.EOF {
-			eof := []byte("EOF")
-			_, err := socketCommunication.WriteToUDP(eof, clientAddress)
+			eof := make([]byte, 32)
+			for i := range eof {
+				eof[i] = 0
+			}
+			eof[0] = byte('E')
+			eof[1] = byte('O')
+			eof[2] = byte('F')
+			eofMessage := append(eof, seq...)
+			_, err := socketCommunication.WriteToUDP(eofMessage, clientAddress)
 			if err != nil {
 				fmt.Println(err)
 				return
