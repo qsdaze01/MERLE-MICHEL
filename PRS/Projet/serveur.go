@@ -52,18 +52,19 @@ func communicate(wg *sync.WaitGroup, port string) {
 		fmt.Println(err)
 		return
 	}
-
+	count := 0
 	for {
+		fmt.Println(count)
+		count++
 		fileBuffer := make([]byte, 32)
 		for i := range fileBuffer {
 			fileBuffer[i] = 0
 		}
 		_, errEof := file.Read(fileBuffer)
 		message := append(fileBuffer, seq...)
-		//fmt.Println(message)
-		_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
 		if errEof == io.EOF {
+			fmt.Println(count)
 			eof := make([]byte, 32)
 			for i := range eof {
 				eof[i] = 0
@@ -82,6 +83,9 @@ func communicate(wg *sync.WaitGroup, port string) {
 			fmt.Println(errEof)
 			return
 		}
+
+		//fmt.Println(message)
+		_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
 		if err != nil {
 			fmt.Println(err)
