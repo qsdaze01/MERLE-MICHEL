@@ -35,7 +35,7 @@ func communicate(wg *sync.WaitGroup, port string) {
 		return
 	}
 
-	defer socketCommunication.Close()
+	//defer socketCommunication.Close()
 
 	filenameClient := make([]byte, 1024)
 	lengthFilenameClient, clientAddress, err := socketCommunication.ReadFromUDP(filenameClient)
@@ -96,10 +96,10 @@ func communicate(wg *sync.WaitGroup, port string) {
 			return
 		}
 
-		//chanAck := make(chan []byte, RCVSIZE-10)
+		chanAck := make(chan int, 1)
 		messageAck := make([]byte, RCVSIZE-10)
 
-		/*go func() {
+		go func() {
 			_, _, err = socketCommunication.ReadFromUDP(messageAck)
 			if err != nil {
 				fmt.Println(err)
@@ -107,39 +107,43 @@ func communicate(wg *sync.WaitGroup, port string) {
 				return
 			}
 			fmt.Println(string(messageAck))
-			chanAck <- messageAck
+			chanAck <- 1
+			return
 		}()
 
 		if RTT != 0 {
 			select {
-			case res := <-chanAck:
-				fmt.Println(res)
-				fmt.Println(messageAck)
-			case <-time.After( 1 * time.Second):
+			case <-chanAck:
+
+			case <-time.After(time.Duration(RTT)):
 				fmt.Println("Timeout")
 				return
 			}
-		}*/
+		} else {
+			select {
+			case <-chanAck:
 
-		_, _, err = socketCommunication.ReadFromUDP(messageAck)
+			case <-time.After(1 * time.Second):
+				fmt.Println("Timeout")
+				return
+			}
+		}
 
 		end := time.Now()
 
-		diffTime := end.Sub(begin)
+		difftime := end.Sub(begin)
 
-		if RTT == 0 || timeout == 1 {
-			RTT = 4 * float64(diffTime)
+		if RTT == 0.0 || timeout == 1 {
+			RTT = 4 * float64(difftime)
 			timeout = 0
 		} else {
-			RTT = RTT - 0.1*(RTT-4*float64(diffTime))
+			RTT = RTT - 0.1*(RTT-4*float64(difftime))
 		}
 
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-
-		fmt.Println(string(messageAck))
 
 		if string(messageAck[0:3]) != "ACK" {
 			fmt.Println("Pas de ACK reçu")
