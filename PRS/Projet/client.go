@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	RCVSIZE := 42
 	arguments := os.Args
 	if len(arguments) == 2 {
 		fmt.Println("args : address port")
@@ -81,8 +82,8 @@ func main() {
 			return
 		}
 
-		message := make([]byte, 42)
-		fileBuffer := make([]byte, 32)
+		message := make([]byte, RCVSIZE)
+		fileBuffer := make([]byte, RCVSIZE-10)
 		file, err := os.OpenFile("received.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 
 		if err != nil {
@@ -96,7 +97,7 @@ func main() {
 				fileBuffer[i] = message[i]
 			}
 
-			//fmt.Println(string(message))
+			fmt.Println("Message :" + string(message))
 
 			if err != nil {
 				fmt.Println(err)
@@ -109,6 +110,7 @@ func main() {
 			}
 
 			messageAck := append(ack, tabSeq...)
+			//fmt.Println("ACK :" + string(messageAck))
 			_, err = socketCommunication.Write(messageAck)
 
 			if err != nil {
@@ -116,7 +118,7 @@ func main() {
 				return
 			}
 
-			fmt.Println("Buffer :" + string(fileBuffer))
+			//fmt.Println("Buffer :" + string(fileBuffer))
 			if string(fileBuffer[0:3]) == "EOF" {
 				fmt.Println("bouh")
 				break //End of File

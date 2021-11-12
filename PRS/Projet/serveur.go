@@ -16,6 +16,9 @@ func random(min, max int) int {
 }
 
 func communicate(wg *sync.WaitGroup, port string) {
+	RCVSIZE := 42
+	RTT := 0.0
+	timeout := 0
 	defer wg.Done()
 
 	portCommunication := ":" + port
@@ -54,9 +57,9 @@ func communicate(wg *sync.WaitGroup, port string) {
 	}
 	count := 0
 	for {
-		fmt.Println(count)
+		//fmt.Println(count)
 		count++
-		fileBuffer := make([]byte, 32)
+		fileBuffer := make([]byte, RCVSIZE-10)
 		for i := range fileBuffer {
 			fileBuffer[i] = 0
 		}
@@ -64,8 +67,8 @@ func communicate(wg *sync.WaitGroup, port string) {
 		message := append(fileBuffer, seq...)
 
 		if errEof == io.EOF {
-			fmt.Println(count)
-			eof := make([]byte, 32)
+			//fmt.Println(count)
+			eof := make([]byte, RCVSIZE-10)
 			for i := range eof {
 				eof[i] = 0
 			}
@@ -78,13 +81,14 @@ func communicate(wg *sync.WaitGroup, port string) {
 				fmt.Println(err)
 				return
 			}
-			break
+			break //On n'acquitte pas le EOF. C'est normal à cause du break
 		} else if errEof != nil {
 			fmt.Println(errEof)
 			return
 		}
 
 		//fmt.Println(message)
+		begin := time.Now()
 		_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
 		if err != nil {
@@ -92,14 +96,48 @@ func communicate(wg *sync.WaitGroup, port string) {
 			return
 		}
 
-		messageAck := make([]byte, 32)
+		chanAck := make(chan []byte, RCVSIZE-10)
+		messageAck := make([]byte, RCVSIZE-10)
 
-		_, _, err = socketCommunication.ReadFromUDP(messageAck)
+		go func() {
+			_, _, err = socketCommunication.ReadFromUDP(messageAck)
+			if err != nil {
+				fmt.Println(err)
+				fmt.Println("a")
+				return
+			}
+			fmt.Println(string(messageAck))
+			chanAck <- messageAck
+		}()
+
+		if RTT != 0 {
+			select {
+			case res := <-chanAck:
+				fmt.Println(res)
+				fmt.Println(messageAck)
+			case <-time.After( /*time.Duration(RTT)*/ 1 * time.Second):
+				fmt.Println("Timeout")
+				return
+			}
+		}
+
+		end := time.Now()
+
+		difftime := end.Sub(begin)
+
+		if RTT == 0 || timeout == 1 {
+			RTT = 4 * float64(difftime)
+			timeout = 0
+		} else {
+			RTT = RTT - 0.1*(RTT-4*float64(difftime))
+		}
 
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+
+		fmt.Println(string(messageAck))
 
 		if string(messageAck[0:3]) != "ACK" {
 			fmt.Println("Pas de ACK reçu")
@@ -172,7 +210,7 @@ func main() {
 			}
 
 			if string(handshake3[0:lengthHandshake3]) == "ACK" {
-				fmt.Println("Handshaked !")
+				fmt.Println("Handshake !")
 			}
 
 			portCommunication++
