@@ -16,7 +16,7 @@ func random(min, max int) int {
 }
 
 func communicate(wg *sync.WaitGroup, port string) {
-	RCVSIZE := 42
+	RCVSIZE := 32
 	RTT := 0.0
 	timeout := 0
 	defer wg.Done()
@@ -41,14 +41,14 @@ func communicate(wg *sync.WaitGroup, port string) {
 	lengthFilenameClient, clientAddress, err := socketCommunication.ReadFromUDP(filenameClient)
 	fmt.Println(string(filenameClient[0:lengthFilenameClient]))
 
-	file, err := os.Open(string(filenameClient[0:lengthFilenameClient]))
+	file, err := os.Open(string(filenameClient[0 : lengthFilenameClient-1]))
 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	seq := []byte(strconv.Itoa(random(0, 2000000)))
+	seq := []byte(strconv.Itoa(random(100000, 900000)))
 	numSeq, err := strconv.Atoi(string(seq))
 
 	if err != nil {
@@ -60,22 +60,22 @@ func communicate(wg *sync.WaitGroup, port string) {
 		//fmt.Println(count)
 		count++
 		fileBuffer := make([]byte, RCVSIZE-10)
-		for i := range fileBuffer {
-			fileBuffer[i] = 0
-		}
+		/*for i := range fileBuffer {
+			fileBuffer[i] = byte('\x00') //sert à rien ici
+		}*/
 		_, errEof := file.Read(fileBuffer)
-		message := append(fileBuffer, seq...)
+		message := append(seq, fileBuffer...)
 
 		if errEof == io.EOF {
 			//fmt.Println(count)
 			eof := make([]byte, RCVSIZE-10)
-			for i := range eof {
+			/*for i := range eof {
 				eof[i] = 0
-			}
-			eof[0] = byte('E')
-			eof[1] = byte('O')
-			eof[2] = byte('F')
-			eofMessage := append(eof, seq...)
+			}*/
+			eof[0] = byte('F')
+			eof[1] = byte('I')
+			eof[2] = byte('N')
+			eofMessage := append(seq, eof...)
 			_, err := socketCommunication.WriteToUDP(eofMessage, clientAddress)
 			if err != nil {
 				fmt.Println(err)
@@ -96,10 +96,10 @@ func communicate(wg *sync.WaitGroup, port string) {
 			return
 		}
 
-		chanAck := make(chan []byte, RCVSIZE-10)
+		//chanAck := make(chan []byte, RCVSIZE-10)
 		messageAck := make([]byte, RCVSIZE-10)
 
-		go func() {
+		/*go func() {
 			_, _, err = socketCommunication.ReadFromUDP(messageAck)
 			if err != nil {
 				fmt.Println(err)
@@ -115,21 +115,23 @@ func communicate(wg *sync.WaitGroup, port string) {
 			case res := <-chanAck:
 				fmt.Println(res)
 				fmt.Println(messageAck)
-			case <-time.After( /*time.Duration(RTT)*/ 1 * time.Second):
+			case <-time.After( 1 * time.Second):
 				fmt.Println("Timeout")
 				return
 			}
-		}
+		}*/
+
+		_, _, err = socketCommunication.ReadFromUDP(messageAck)
 
 		end := time.Now()
 
-		difftime := end.Sub(begin)
+		diffTime := end.Sub(begin)
 
 		if RTT == 0 || timeout == 1 {
-			RTT = 4 * float64(difftime)
+			RTT = 4 * float64(diffTime)
 			timeout = 0
 		} else {
-			RTT = RTT - 0.1*(RTT-4*float64(difftime))
+			RTT = RTT - 0.1*(RTT-4*float64(diffTime))
 		}
 
 		if err != nil {
@@ -184,10 +186,10 @@ func main() {
 
 	for {
 		handshake1 := make([]byte, 1024)
-		lengthHandshake1, clientAddress, err := socketConnect.ReadFromUDP(handshake1)
-
-		if string(handshake1[0:lengthHandshake1]) == "SYN" {
-			handshake2 := "SYN_ACK " + strconv.Itoa(portCommunication)
+		_, clientAddress, err := socketConnect.ReadFromUDP(handshake1)
+		if string(handshake1[0:3]) == "SYN" {
+			handshake2 := "SYN-ACK" + strconv.Itoa(portCommunication)
+			fmt.Println(handshake2)
 			_, err = socketConnect.WriteToUDP([]byte(handshake2), clientAddress)
 
 			if err != nil {
@@ -195,7 +197,7 @@ func main() {
 				return
 			}
 
-			fmt.Println("SYN_ACK")
+			fmt.Println("SYN-ACK")
 
 			//go routine avec socket communication ici
 			wg.Add(1)
@@ -209,8 +211,8 @@ func main() {
 				return
 			}
 
-			if string(handshake3[0:lengthHandshake3]) == "ACK" {
-				fmt.Println("Handshake !")
+			if string(handshake3[0:lengthHandshake3-1]) == "ACK" {
+				fmt.Println("Handshaked !")
 			}
 
 			portCommunication++

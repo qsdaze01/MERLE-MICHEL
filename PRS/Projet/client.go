@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	RCVSIZE := 42
+	RCVSIZE := 10000
 	arguments := os.Args
 	if len(arguments) == 2 {
 		fmt.Println("args : address port")
@@ -74,7 +74,7 @@ func main() {
 
 		fmt.Println("Handshaked !")
 
-		filename := []byte("test.txt")
+		filename := []byte("hawkeye.jpg")
 		_, err = socketCommunication.Write(filename)
 
 		if err != nil {
@@ -84,7 +84,7 @@ func main() {
 
 		message := make([]byte, RCVSIZE)
 		fileBuffer := make([]byte, RCVSIZE-10)
-		file, err := os.OpenFile("received.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+		file, err := os.OpenFile("received.jpg", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 
 		if err != nil {
 			fmt.Println(err)

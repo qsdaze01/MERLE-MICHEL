@@ -14,7 +14,9 @@
 
 
 ## Transformer le truc en GO
-
+- problème timeout
+- NUL dans le print du fichier (pas de soucis apparemment pour une image)
+- besoin d'acquitter le EOF ?
 
 ## Astuce FLM
 
