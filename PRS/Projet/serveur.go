@@ -15,6 +15,31 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
+func receiveACK(socketCommunication net.UDPConn, messageAck []byte, RTT float64) int {
+	if RTT == 0 {
+		err := socketCommunication.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		if err != nil {
+			fmt.Println(err)
+			return -1
+		}
+	} else {
+		err := socketCommunication.SetReadDeadline(time.Now().Add(time.Duration(RTT)))
+		if err != nil {
+			fmt.Println(err)
+			return -1
+		}
+	}
+
+	taille, _, err := socketCommunication.ReadFromUDP(messageAck)
+	fmt.Println("Taille" + string(taille))
+	if err != nil {
+		fmt.Println(err)
+		return -1
+	}
+
+	return 0
+}
+
 func send(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UDPConn, RCVSIZE int, RTT float64, timeout int, window int) (int, int, float64) {
 	begin := time.Now()
 	_, err := socketCommunication.WriteToUDP(message, clientAddress)
@@ -24,42 +49,13 @@ func send(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UD
 		return -1, window, RTT
 	}
 
-	chanAck := make(chan []byte, RCVSIZE)
 	messageAck := make([]byte, RCVSIZE)
 
-	go func() {
-		taille, _, err := socketCommunication.ReadFromUDP(messageAck)
-		fmt.Println("Taille" + string(taille))
-		if err != nil {
-			fmt.Println(err)
-			//fmt.Println("a")
-			return
-		}
-		fmt.Println("Normalement plein : " + string(messageAck)) //TODO: Ici messageAck contient bien le bon message en cas d'erreur
-		chanAck <- messageAck
-		//chanAck <- 1
-		return
-	}()
-
-	if RTT != 0 {
-		select {
-		case messageAck = <-chanAck:
-			fmt.Println("message reçu")
-		case <-time.After(time.Duration(RTT)):
-			fmt.Println("Timeout")
-			window = 1
-			timeout = 1
-		}
-	} else {
-		select {
-		case messageAck = <-chanAck:
-			fmt.Println("message reçu")
-		case <-time.After(10 * time.Second):
-			fmt.Println("Timeout")
-			window = 1
-			timeout = 1
-		}
+	if receiveACK(socketCommunication, messageAck, RTT) != 0 {
+		window = 1
+		timeout = 1
 	}
+
 	end := time.Now()
 
 	difftime := end.Sub(begin)
@@ -156,7 +152,6 @@ func communicate(wg *sync.WaitGroup, port string) {
 		//fmt.Println(message)
 
 		for {
-			time.Sleep(500 * time.Millisecond) //TODO: à retirer quand on aura tout débugué
 			previousRTT := 0.0
 			res := 0
 			res, window, previousRTT = send(message, clientAddress, *socketCommunication, RCVSIZE, RTT, timeout, window)
