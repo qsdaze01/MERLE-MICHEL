@@ -15,7 +15,7 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UDPConn, RCVSIZE int, RTT float64, timeout int, window int) (int, int, float64){
+func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UDPConn, RCVSIZE int, RTT float64, timeout int, window int) (int, int, float64) {
 	begin := time.Now()
 	_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
@@ -24,25 +24,27 @@ func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UD
 		return -1, window, RTT
 	}
 
-	chanAck := make(chan int, 1)
+	chanAck := make(chan []byte, RCVSIZE)
 	messageAck := make([]byte, RCVSIZE)
 
 	go func() {
-		_, _, err = socketCommunication.ReadFromUDP(messageAck)
+		taille, _, err := socketCommunication.ReadFromUDP(messageAck)
+		fmt.Println("Taille" + string(taille))
 		if err != nil {
 			fmt.Println(err)
 			//fmt.Println("a")
 			return
 		}
-		fmt.Println("Normalement plein : " + string(messageAck))//TODO: Ici messageAck contient bien le bon message en cas d'erreur
-		chanAck <- 1
+		fmt.Println("Normalement plein : " + string(messageAck)) //TODO: Ici messageAck contient bien le bon message en cas d'erreur
+		chanAck <- messageAck
+		//chanAck <- 1
 		return
 	}()
 
 	if RTT != 0 {
 		select {
-		case <-chanAck:
-
+		case messageAck = <-chanAck:
+			fmt.Println("message reçu")
 		case <-time.After(time.Duration(RTT)):
 			fmt.Println("Timeout")
 			window = 1
@@ -50,9 +52,9 @@ func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UD
 		}
 	} else {
 		select {
-		case <-chanAck:
-
-		case <-time.After(1*time.Second):
+		case messageAck = <-chanAck:
+			fmt.Println("message reçu")
+		case <-time.After(1 * time.Second):
 			fmt.Println("Timeout")
 			window = 1
 			timeout = 1
@@ -73,7 +75,7 @@ func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UD
 		fmt.Println(err)
 		return -1, window, RTT
 	}
-	fmt.Println("Normalement vide :" + string(messageAck)) //TODO : Mais là messageAck est vide en cas d'erreur
+	fmt.Println("Normalement vide :" + string(messageAck)) //TODO : Mais là, messageAck est vide en cas d'erreur
 	//fmt.Println(string(messageAck[0:3])) //TODO : régler le problème avec l'acquittement des messages. Lorsqu'un message est drop, il ne trouve plus le 'ACK' dans le message
 	if string(messageAck[0:3]) != "ACK" {
 		fmt.Println("Pas de ACK reçu")
@@ -122,7 +124,7 @@ func communicate(wg *sync.WaitGroup, port string) {
 		return
 	}
 
-	seq := []byte("000001")//[]byte(strconv.Itoa(random(100000, 900000)))
+	seq := []byte("000001") //[]byte(strconv.Itoa(random(100000, 900000)))
 	numSeq, err := strconv.Atoi(string(seq))
 	//seq = append(seq, byte('\u0000'))
 
@@ -155,16 +157,18 @@ func communicate(wg *sync.WaitGroup, port string) {
 		//fmt.Println(message)
 
 		for {
-			time.Sleep(500*time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			previousRTT := 0.0
 			res := 0
 			res, window, previousRTT = sent(message, clientAddress, *socketCommunication, RCVSIZE, RTT, timeout, window)
-			if res == 0{
+			if res == 0 {
 				RTT = previousRTT
 				break
-			}else if res == -1{
+			} else if res == -1 {
 				fmt.Println("Error sent")
 				return
+			} else if res == 1 {
+				RTT = 0
 			}
 			fmt.Println("Renvoi message")
 		}
@@ -172,15 +176,15 @@ func communicate(wg *sync.WaitGroup, port string) {
 		numSeq++
 		if numSeq < 10 {
 			seq = []byte("00000" + strconv.Itoa(numSeq))
-		}else if numSeq < 100 {
+		} else if numSeq < 100 {
 			seq = []byte("0000" + strconv.Itoa(numSeq))
-		}else if numSeq < 1000 {
+		} else if numSeq < 1000 {
 			seq = []byte("000" + strconv.Itoa(numSeq))
-		}else if numSeq < 10000 {
+		} else if numSeq < 10000 {
 			seq = []byte("00" + strconv.Itoa(numSeq))
-		}else if numSeq < 100000 {
+		} else if numSeq < 100000 {
 			seq = []byte("0" + strconv.Itoa(numSeq))
-		}else{
+		} else {
 			seq = []byte(strconv.Itoa(numSeq))
 		}
 
