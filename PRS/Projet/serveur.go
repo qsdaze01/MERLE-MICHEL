@@ -15,7 +15,7 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UDPConn, RCVSIZE int, RTT float64, timeout int, window int) (int, int, float64) {
+func send(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UDPConn, RCVSIZE int, RTT float64, timeout int, window int) (int, int, float64) {
 	begin := time.Now()
 	_, err := socketCommunication.WriteToUDP(message, clientAddress)
 
@@ -54,7 +54,7 @@ func sent(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UD
 		select {
 		case messageAck = <-chanAck:
 			fmt.Println("message reçu")
-		case <-time.After(1 * time.Second):
+		case <-time.After(10 * time.Second):
 			fmt.Println("Timeout")
 			window = 1
 			timeout = 1
@@ -138,12 +138,11 @@ func communicate(wg *sync.WaitGroup, port string) {
 		message := append(seq, fileBuffer...)
 
 		if errEof == io.EOF {
-			eof := make([]byte, RCVSIZE-6)
+			eof := make([]byte, 3)
 			eof[0] = byte('F')
 			eof[1] = byte('I')
 			eof[2] = byte('N')
-			eofMessage := append(seq, eof...)
-			_, err := socketCommunication.WriteToUDP(eofMessage, clientAddress)
+			_, err := socketCommunication.WriteToUDP(eof, clientAddress)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -157,15 +156,15 @@ func communicate(wg *sync.WaitGroup, port string) {
 		//fmt.Println(message)
 
 		for {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond) //TODO: à retirer quand on aura tout débugué
 			previousRTT := 0.0
 			res := 0
-			res, window, previousRTT = sent(message, clientAddress, *socketCommunication, RCVSIZE, RTT, timeout, window)
+			res, window, previousRTT = send(message, clientAddress, *socketCommunication, RCVSIZE, RTT, timeout, window)
 			if res == 0 {
 				RTT = previousRTT
 				break
 			} else if res == -1 {
-				fmt.Println("Error sent")
+				fmt.Println("Error send")
 				return
 			} else if res == 1 {
 				RTT = 0
@@ -197,8 +196,8 @@ func main() {
 	var wg sync.WaitGroup
 
 	arguments := os.Args
-	if len(arguments) == 2 {
-		fmt.Println("args : port_connection port_communication")
+	if len(arguments) == 1 {
+		fmt.Println("args : port")
 		return
 	}
 	portConnection := ":" + arguments[1]
@@ -217,7 +216,7 @@ func main() {
 
 	defer socketConnect.Close()
 
-	portCommunication, err := strconv.Atoi(arguments[2])
+	portCommunication := 2000
 	if err != nil {
 		fmt.Println(err)
 		return
