@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+var messageSent []int
+var lock []sync.Mutex
+var RCVSIZE = 1024
+
 func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
@@ -40,22 +44,82 @@ func receiveACK(socketCommunication net.UDPConn, messageAck []byte, RTT float64)
 	return 0, messageAck
 }
 
-func send(message []byte, clientAddress *net.UDPAddr, socketCommunication net.UDPConn) int {
+func send(clientAddress *net.UDPAddr, socketCommunication net.UDPConn, window int, instanceNumber int, file *os.File) int {
+	seq := []byte("000001")
+	numSeq, err := strconv.Atoi(string(seq))
 
-	_, err := socketCommunication.WriteToUDP(message, clientAddress)
 	if err != nil {
 		fmt.Println(err)
 		return -1
 	}
-	return 0
+
+	for {
+		lock[instanceNumber].Lock()
+		packetCount := messageSent[instanceNumber]
+		lock[instanceNumber].Unlock()
+
+		for packetCount < window {
+			fileBuffer := make([]byte, RCVSIZE-6)
+			_, errEof := file.Read(fileBuffer)
+			if errEof == io.EOF {
+				eof := make([]byte, 3)
+				eof[0] = byte('F')
+				eof[1] = byte('I')
+				eof[2] = byte('N')
+				_, err := socketCommunication.WriteToUDP(eof, clientAddress)
+				if err != nil {
+					fmt.Println(err)
+					return -1
+				}
+
+				/*endTimer := time.Now()
+				diffTimer := endTimer.Sub(startTimer)
+				fmt.Println(diffTimer)*/
+
+				return 0 //On n'acquitte pas le FIN. C'est normal à cause du break
+			} else if errEof != nil {
+				fmt.Println(errEof)
+				return -1
+			} else {
+				message := append(seq, fileBuffer...)
+				_, err := socketCommunication.WriteToUDP(message, clientAddress)
+				if err != nil {
+					fmt.Println(err)
+					return -1
+				}
+			}
+
+			packetCount++
+
+			lock[instanceNumber].Lock()
+			messageSent[instanceNumber]++
+			lock[instanceNumber].Unlock()
+
+			fmt.Println("Renvoi message")
+
+			fmt.Println(numSeq)
+			numSeq++
+			if numSeq < 10 {
+				seq = []byte("00000" + strconv.Itoa(numSeq))
+			} else if numSeq < 100 {
+				seq = []byte("0000" + strconv.Itoa(numSeq))
+			} else if numSeq < 1000 {
+				seq = []byte("000" + strconv.Itoa(numSeq))
+			} else if numSeq < 10000 {
+				seq = []byte("00" + strconv.Itoa(numSeq))
+			} else if numSeq < 100000 {
+				seq = []byte("0" + strconv.Itoa(numSeq))
+			} else {
+				seq = []byte(strconv.Itoa(numSeq))
+			}
+		}
+	}
 }
 
 func communicate(wg *sync.WaitGroup, port string) {
 
-	RCVSIZE := 1024
 	RTT := 0.0
 	window := 1
-	messageSent := 0
 	defer wg.Done()
 
 	portCommunication := ":" + port
@@ -94,9 +158,6 @@ func communicate(wg *sync.WaitGroup, port string) {
 	var bufferMessage [][]byte
 	startTimer := time.Now()
 
-	if messageSent < window {
-
-	}
 	for {
 		messageAck := make([]byte, RCVSIZE)
 		difftime := 100 * time.Millisecond
