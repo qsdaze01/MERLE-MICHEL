@@ -11,28 +11,57 @@ import (
 	"time"
 )
 
-var messageSent []int
-var lockMessageSent [] sync.Mutex
-var lockBufferMessage [] sync.Mutex
 var RCVSIZE = 1024
-var bufferMessage [][][] byte
+
+var lockMessageSent []sync.Mutex
+var lockBufferMessage []sync.Mutex
+var lockInstanciation sync.Mutex
+
+var bufferMessage [][][]byte
+var messageSent []int
 
 func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-func receiveACK(socketCommunication net.UDPConn, messageAck []byte, RTT float64) (int, []byte) {
+func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int) (int, []byte) {
+	messageAck := make([]byte, RCVSIZE)
 	if RTT == 0 {
 		err := socketCommunication.SetReadDeadline(time.Now().Add(40 * time.Millisecond))
 		if err != nil {
+			fmt.Println("Renvoi message")
 			fmt.Println(err)
-			return -1, nil
+
+			messageResent := make([]byte, RCVSIZE)
+			lockBufferMessage[instanceNumber].Lock()
+			messageResent = bufferMessage[instanceNumber][0]
+			lockBufferMessage[instanceNumber].Unlock()
+			_, err := socketCommunication.WriteToUDP(messageResent, clientAddress)
+			if err != nil {
+				fmt.Println(err)
+				return -1, nil
+			}
+
+			_, messageAck = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
 		}
 	} else {
 		err := socketCommunication.SetReadDeadline(time.Now().Add(time.Duration(RTT)))
+
 		if err != nil {
+			fmt.Println("Renvoi message")
 			fmt.Println(err)
-			return -1, nil
+
+			messageResent := make([]byte, RCVSIZE)
+			lockBufferMessage[instanceNumber].Lock()
+			messageResent = bufferMessage[instanceNumber][0]
+			lockBufferMessage[instanceNumber].Unlock()
+			_, err := socketCommunication.WriteToUDP(messageResent, clientAddress)
+			if err != nil {
+				fmt.Println(err)
+				return -1, nil
+			}
+
+			_, messageAck = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
 		}
 	}
 
@@ -46,7 +75,30 @@ func receiveACK(socketCommunication net.UDPConn, messageAck []byte, RTT float64)
 	return 0, messageAck
 }
 
-func send(clientAddress *net.UDPAddr, socketCommunication net.UDPConn, window int, instanceNumber int, file *os.File) int {
+func receive(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int) (int, []byte) {
+	for {
+		for {
+			lockBufferMessage[instanceNumber].Lock()
+			lengthBufferMessage := len(bufferMessage[instanceNumber])
+			lockBufferMessage[instanceNumber].Unlock()
+			if lengthBufferMessage == 0 {
+				break
+			}
+			//messageAck := make([]byte, RCVSIZE)
+			_, _ = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
+
+			lockBufferMessage[instanceNumber].Lock()
+			bufferMessage[instanceNumber] = append(bufferMessage[instanceNumber][:0], bufferMessage[instanceNumber][1:]...)
+			lockBufferMessage[instanceNumber].Unlock()
+
+			lockMessageSent[instanceNumber].Lock()
+			messageSent[instanceNumber]--
+			lockMessageSent[instanceNumber].Unlock()
+		}
+	}
+}
+
+func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, window int, instanceNumber int, file *os.File) int {
 	seq := []byte("000001")
 	numSeq, err := strconv.Atoi(string(seq))
 
@@ -102,8 +154,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication net.UDPConn, window in
 			messageSent[instanceNumber]++
 			lockMessageSent[instanceNumber].Unlock()
 
-			fmt.Println("Renvoi message")
-
 			fmt.Println(numSeq)
 			numSeq++
 			if numSeq < 10 {
@@ -123,10 +173,22 @@ func send(clientAddress *net.UDPAddr, socketCommunication net.UDPConn, window in
 	}
 }
 
-func communicate(wg *sync.WaitGroup, port string) {
+func communicate(wg *sync.WaitGroup, port string, instanceNumber int) {
+	var lockMessage sync.Mutex
+	var lockBuffer sync.Mutex
+
+	window := 1
+	message := make([][]byte, window)
+
+	lockInstanciation.Lock()
+	lockMessageSent = append(lockMessageSent, lockMessage)
+	lockBufferMessage = append(lockBufferMessage, lockBuffer)
+	bufferMessage = append(bufferMessage, message)
+	messageSent = append(messageSent, 0)
+	lockInstanciation.Unlock()
 
 	RTT := 0.0
-	window := 1
+
 	defer wg.Done()
 
 	portCommunication := ":" + port
@@ -154,30 +216,14 @@ func communicate(wg *sync.WaitGroup, port string) {
 		return
 	}
 
-		for {
-			res, messageAck = receiveACK(*socketCommunication, messageAck, RTT)
-			if res != 0 {
-				window = 1
-				RTT = 4 * float64(difftime)
-				res = send(bufferMessage[0], clientAddress, *socketCommunication)
-				if res < 0 {
-					fmt.Println("Problème d'envoi")
-					return
-				}
-			} else {
-				window++
-				messageSent--
-				RTT = RTT - 0.1*(RTT-4*float64(difftime))
-				bufferMessage = append(bufferMessage[:0], bufferMessage[1:]...)
-				break
-			}
-		}
+	go send(clientAddress, socketCommunication, window, instanceNumber, file)
 
+	go receive(clientAddress, socketCommunication, RTT, instanceNumber)
 
-	}
 }
 
 func main() {
+	instanceNumber := 0
 	rand.Seed(time.Now().Unix())
 
 	var wg sync.WaitGroup
@@ -226,7 +272,8 @@ func main() {
 
 			//go routine avec socket communication ici
 			wg.Add(1)
-			go communicate(&wg, strconv.Itoa(portCommunication))
+			go communicate(&wg, strconv.Itoa(portCommunication), instanceNumber)
+			instanceNumber++
 
 			handshake3 := make([]byte, 1024)
 			lengthHandshake3, _, err := socketConnect.ReadFromUDP(handshake3)
