@@ -20,6 +20,8 @@ var lockInstanciation sync.Mutex
 var bufferMessage [][][]byte
 var messageSent []int
 
+var window = 10
+
 func readAckMessage(messageAck []byte) int {
 	numAck := string(messageAck[3:9])
 	res, _ := strconv.Atoi(numAck)
@@ -29,7 +31,7 @@ func readAckMessage(messageAck []byte) int {
 func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int, numSeqReceived int) (int, []byte, int) {
 	messageAck := make([]byte, RCVSIZE)
 	if RTT == 0 {
-		_ = socketCommunication.SetReadDeadline(time.Now().Add(1000 * time.Millisecond))
+		_ = socketCommunication.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 		_, _, err := socketCommunication.ReadFromUDP(messageAck)
 		if err != nil {
 			fmt.Println("Renvoi message")
@@ -37,8 +39,8 @@ func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RT
 
 			messageResent := make([]byte, RCVSIZE)
 			lockBufferMessage[instanceNumber].Lock()
-			if len(bufferMessage[instanceNumber]) >= 3 {
-				messageResent = bufferMessage[instanceNumber][2]
+			if len(bufferMessage[instanceNumber]) >= window+1 {
+				messageResent = bufferMessage[instanceNumber][window]
 			} else {
 				messageResent = bufferMessage[instanceNumber][0]
 			}
@@ -61,8 +63,8 @@ func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RT
 
 			messageResent := make([]byte, RCVSIZE)
 			lockBufferMessage[instanceNumber].Lock()
-			if len(bufferMessage[instanceNumber]) >= 3 {
-				messageResent = bufferMessage[instanceNumber][2]
+			if len(bufferMessage[instanceNumber]) >= window+1 {
+				messageResent = bufferMessage[instanceNumber][window]
 			} else {
 				messageResent = bufferMessage[instanceNumber][0]
 			}
@@ -95,7 +97,7 @@ func receive(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT f
 
 			for {
 				_, _, numSeqReceived = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber, numSeqReceived)
-				if numSeqReceived == checkNumSeq {
+				if numSeqReceived >= checkNumSeq {
 					fmt.Print("checkNumSeq : ")
 					fmt.Println(checkNumSeq)
 					checkNumSeq++
@@ -193,7 +195,6 @@ func communicate(wg *sync.WaitGroup, port string, instanceNumber int) {
 	var lockMessage sync.Mutex
 	var lockBuffer sync.Mutex
 
-	window := 2
 	message := make([][]byte, window)
 
 	lockInstanciation.Lock()
