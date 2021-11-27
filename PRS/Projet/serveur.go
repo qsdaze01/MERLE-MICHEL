@@ -20,11 +20,13 @@ var lockInstanciation sync.Mutex
 var bufferMessage [][][]byte
 var messageSent []int
 
-func random(min, max int) int {
-	return rand.Intn(max-min) + min
+func readAckMessage(messageAck []byte) int {
+	numAck := string(messageAck[3:9])
+	res, _ := strconv.Atoi(numAck)
+	return res
 }
 
-func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int) (int, []byte) {
+func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int, numSeqReceived int) (int, []byte, int) {
 	messageAck := make([]byte, RCVSIZE)
 	if RTT == 0 {
 		_ = socketCommunication.SetReadDeadline(time.Now().Add(1000 * time.Millisecond))
@@ -35,16 +37,20 @@ func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RT
 
 			messageResent := make([]byte, RCVSIZE)
 			lockBufferMessage[instanceNumber].Lock()
-			messageResent = bufferMessage[instanceNumber][1]
-			fmt.Println(string(messageResent))
+			if len(bufferMessage[instanceNumber]) >= 3 {
+				messageResent = bufferMessage[instanceNumber][2]
+			} else {
+				messageResent = bufferMessage[instanceNumber][0]
+			}
 			lockBufferMessage[instanceNumber].Unlock()
+			fmt.Println(string(messageResent))
 			_, err := socketCommunication.WriteToUDP(messageResent, clientAddress)
 			if err != nil {
 				fmt.Println(err)
-				return -1, nil
+				return -1, nil, numSeqReceived
 			}
 
-			_, messageAck = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
+			_, messageAck, numSeqReceived = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber, numSeqReceived)
 		}
 	} else {
 		_ = socketCommunication.SetReadDeadline(time.Now().Add(time.Duration(RTT)))
@@ -55,22 +61,29 @@ func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RT
 
 			messageResent := make([]byte, RCVSIZE)
 			lockBufferMessage[instanceNumber].Lock()
-			messageResent = bufferMessage[instanceNumber][0]
+			if len(bufferMessage[instanceNumber]) >= 3 {
+				messageResent = bufferMessage[instanceNumber][2]
+			} else {
+				messageResent = bufferMessage[instanceNumber][0]
+			}
 			lockBufferMessage[instanceNumber].Unlock()
 			_, err := socketCommunication.WriteToUDP(messageResent, clientAddress)
 			if err != nil {
 				fmt.Println(err)
-				return -1, nil
+				return -1, nil, numSeqReceived
 			}
 
-			_, messageAck = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
+			_, messageAck, numSeqReceived = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber, numSeqReceived)
 		}
 	}
+	numSeqReceived = readAckMessage(messageAck)
 
-	return 0, messageAck
+	return 0, messageAck, numSeqReceived
 }
 
 func receive(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int) (int, []byte) {
+	numSeqReceived := 1
+	checkNumSeq := 1
 	for {
 		for {
 			lockBufferMessage[instanceNumber].Lock()
@@ -79,8 +92,16 @@ func receive(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT f
 			if lengthBufferMessage == 0 {
 				break
 			}
-			//messageAck := make([]byte, RCVSIZE)
-			_, _ = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
+
+			for {
+				_, _, numSeqReceived = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber, numSeqReceived)
+				if numSeqReceived == checkNumSeq {
+					fmt.Print("checkNumSeq : ")
+					fmt.Println(checkNumSeq)
+					checkNumSeq++
+					break
+				}
+			}
 
 			lockBufferMessage[instanceNumber].Lock()
 			bufferMessage[instanceNumber] = append(bufferMessage[instanceNumber][:0], bufferMessage[instanceNumber][1:]...)
@@ -172,7 +193,7 @@ func communicate(wg *sync.WaitGroup, port string, instanceNumber int) {
 	var lockMessage sync.Mutex
 	var lockBuffer sync.Mutex
 
-	window := 1
+	window := 2
 	message := make([][]byte, window)
 
 	lockInstanciation.Lock()
