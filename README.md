@@ -1,21 +1,12 @@
 # MERLE-MICHEL    
 
 ## ToDo list :    
-- Mettre le code en forme (là c'est dégueu)     
-- Ajout mécanisme de renvoi de paquets dans la fenêtre      
-- Ajouter mécanismes supplémentaires     
-- Ajouter meilleure estimation de RTT     
-- On ne sait pas quand le fichier a fini de s'envoyer
-- Problème écriture du fichier
-- Problème dernier numéro de séquence
-- Tester congestion avoidance
-- Faire le threshold 
-- Tester avec un gros fichier
+- Problème EOF côté serveur qui continue de renvoyer le dernier paquet vu qu'il ne reçoit pas d'ACK de la part du client
+- Problème des mutex quand on a plusieurs client (on essaye de release un mutex déjà unlocked)
+- Mettre un lock et faire un tableau pour les window
+- Faire des tests avec un gros fichier
 
 
-## Transformer le truc en GO
-- problème timeout
-- NUL dans le print du fichier (pas de soucis apparemment pour une image)
 
 ## Astuce FLM
 
