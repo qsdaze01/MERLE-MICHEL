@@ -27,14 +27,16 @@ func random(min, max int) int {
 func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RTT float64, instanceNumber int) (int, []byte) {
 	messageAck := make([]byte, RCVSIZE)
 	if RTT == 0 {
-		err := socketCommunication.SetReadDeadline(time.Now().Add(40 * time.Millisecond))
+		_ = socketCommunication.SetReadDeadline(time.Now().Add(1000 * time.Millisecond))
+		_, _, err := socketCommunication.ReadFromUDP(messageAck)
 		if err != nil {
 			fmt.Println("Renvoi message")
 			fmt.Println(err)
 
 			messageResent := make([]byte, RCVSIZE)
 			lockBufferMessage[instanceNumber].Lock()
-			messageResent = bufferMessage[instanceNumber][0]
+			messageResent = bufferMessage[instanceNumber][1]
+			fmt.Println(string(messageResent))
 			lockBufferMessage[instanceNumber].Unlock()
 			_, err := socketCommunication.WriteToUDP(messageResent, clientAddress)
 			if err != nil {
@@ -45,8 +47,8 @@ func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RT
 			_, messageAck = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
 		}
 	} else {
-		err := socketCommunication.SetReadDeadline(time.Now().Add(time.Duration(RTT)))
-
+		_ = socketCommunication.SetReadDeadline(time.Now().Add(time.Duration(RTT)))
+		_, _, err := socketCommunication.ReadFromUDP(messageAck)
 		if err != nil {
 			fmt.Println("Renvoi message")
 			fmt.Println(err)
@@ -63,13 +65,6 @@ func receiveAck(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, RT
 
 			_, messageAck = receiveAck(clientAddress, socketCommunication, RTT, instanceNumber)
 		}
-	}
-
-	_, _, err := socketCommunication.ReadFromUDP(messageAck)
-
-	if err != nil {
-		fmt.Println(err)
-		return -1, nil
 	}
 
 	return 0, messageAck
