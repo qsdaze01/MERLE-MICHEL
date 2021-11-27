@@ -6,6 +6,9 @@
 - Mettre un lock et faire un tableau pour les window
 - Faire des tests avec un gros fichier
 
+## Client 2 TODO
+- Selective Ack, car les Ack ne sont pas renvoyés dans le bon ordre par le client 2
+
 
 
 ## Astuce FLM
