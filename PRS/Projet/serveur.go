@@ -13,7 +13,7 @@ import (
 
 var arg = os.Args
 var RCVSIZE, _ = strconv.Atoi(arg[3])
-var TIMEOUT int64 = 40000000
+var TIMEOUT int64 = 100000000
 
 var window, _ = strconv.Atoi(arg[2])
 
@@ -31,8 +31,7 @@ func receive(channelAck chan int, socketCommunication *net.UDPConn, channelStop 
 		_, _, _ = socketCommunication.ReadFromUDP(messageAck)
 		numAck := string(messageAck[3:9])
 		res, _ := strconv.Atoi(numAck)
-		//fmt.Print("ACK : ")
-		//fmt.Println(numAck)
+		fmt.Println("ACK : ", numAck)
 		channelAck <- res
 	}
 }
@@ -43,14 +42,17 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 	var messageSentBuffer [][]byte
 	packetCount := 0
 	startTimer := time.Now()
+	var endOfFile = false
+	var numAck = 1
+	var numAckCount = 1
 
 	for {
 
-		for packetCount < window {
+		for (packetCount < window) && (endOfFile == false) {
 			fileBuffer := make([]byte, RCVSIZE-6)
 			_, errEof := file.Read(fileBuffer)
 			if errEof == io.EOF {
-
+				endOfFile = true //permet de ne plus rentrer dans la boucle en cas d'eof puisqu'on a plus besoin de lire le fichier
 				//_, err := socketCommunication.WriteToUDP(eof, clientAddress)
 
 				//fmt.Println("EOF prêt à être envoyé")
@@ -73,8 +75,8 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 
 			packetCount++
 
-			//fmt.Print("Paquet envoyé : ")
-			//fmt.Println(numSeq)
+			fmt.Print("Paquet envoyé : ")
+			fmt.Println(numSeq)
 			numSeq++
 			if numSeq < 10 {
 				seq = []byte("00000" + strconv.Itoa(numSeq))
@@ -92,20 +94,69 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 
 			select {
 			case numAckReceived := <-channelAck:
-				for i := 0; i < len(messageSentBuffer); i++ {
+
+				if numAckReceived == numAck { //pour fast retransmit
+					numAckCount++ //on incrémente le compteur des duplicate ack
+					fmt.Printf("duplicate Ack : %d  / %d times\n", numAck, numAckCount)
+				} else {
+					numAck = numAckReceived //nouvel ack reçu on remet tout à 0
+					numAckCount = 1
+				}
+
+				count := 0 //sert à faire la boucle suivante pour éviter les saut d'indices quand le buffer supprime une entrée (sinon après suppression l'incrémentation du for saute un index)
+
+				for count < len(messageSentBuffer) {
 					//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
-					extractNumAck := messageSentBuffer[i][19:25]
+					extractNumAck := messageSentBuffer[count][19:25]
 					intNumAck, _ := strconv.Atoi(string(extractNumAck))
 					if intNumAck <= numAckReceived {
-						//fmt.Print("Suppression du buffer : ")
-						//fmt.Println(intNumAck)
-						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
+						fmt.Println("Suppression du buffer : ", intNumAck)
+						messageSentBuffer = append(messageSentBuffer[:count], messageSentBuffer[count+1:]...) //on retire le message qui a été acquitté
 
 						packetCount--
+
+					} else {
+						count++
 					}
 				}
 			default:
 			}
+
+			for i := 0; i < len(messageSentBuffer); i++ {
+				extractNumAck := messageSentBuffer[i][19:25]
+				intNumAck, _ := strconv.Atoi(string(extractNumAck))
+				if (intNumAck == numAck+1) && (numAckCount >= 3) {
+					//étape 2 : on vérifie s'il y a des duplicate ack et si oui on retransmet le paquet ack+1 (fast retransmit)
+					timestamp := []byte(strconv.FormatInt(time.Now().UnixNano(), 10)) //on update le timestamp
+					messageSentBuffer[i] = append(timestamp, messageSentBuffer[i][19:]...)
+					_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
+					if err != nil {
+						fmt.Println(err)
+						return -1
+					}
+					fmt.Println("Fast retransmit : ", numAck+1)
+
+					numAckCount = 1
+
+				}
+			}
+
+			for i := 0; i < len(messageSentBuffer); i++ {
+				//étape 3: on check les timestamp et on réémet les messages qui sont en timeout
+				msgTimestamp := messageSentBuffer[i][:19]
+				intTimestamp, _ := strconv.ParseInt(string(msgTimestamp), 10, 64)
+				if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
+					timestamp := []byte(strconv.FormatInt(time.Now().UnixNano(), 10)) //on update le timestamp
+					messageSentBuffer[i] = append(timestamp, messageSentBuffer[i][19:]...)
+					_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
+					if err != nil {
+						fmt.Println(err)
+						return -1
+					}
+					fmt.Println("renvoi du paquet : ", string(messageSentBuffer[i][19:25]))
+				}
+			}
+
 		}
 
 		if len(messageSentBuffer) == 0 {
@@ -116,42 +167,76 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 			endTimer := time.Now()
 			diffTimer := endTimer.Sub(startTimer)
-			//fmt.Println("EOF envoyé, fichier transféré avec succès !")
+			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
 			channelStop <- true //on dit à la go routine receive de s'arrêter
 			return 0            //on s'arrête quand on a tout reçu
 		}
 
+		select {
+		case numAckReceived := <-channelAck:
+
+			if numAckReceived == numAck { //pour fast retransmit
+				numAckCount++ //on incrémente le compteur des duplicate ack
+				fmt.Printf("duplicate Ack : %d  / %d times\n", numAck, numAckCount)
+			} else {
+				numAck = numAckReceived //nouvel ack reçu on remet tout à 0
+				numAckCount = 1
+			}
+
+			count := 0 //sert à faire la boucle suivante pour éviter les saut d'indices quand le buffer supprime une entrée (sinon après suppression l'incrémentation du for saute un index)
+
+			for count < len(messageSentBuffer) {
+				//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
+				extractNumAck := messageSentBuffer[count][19:25]
+				intNumAck, _ := strconv.Atoi(string(extractNumAck))
+				if intNumAck <= numAckReceived {
+					fmt.Println("Suppression du buffer : ", intNumAck)
+					messageSentBuffer = append(messageSentBuffer[:count], messageSentBuffer[count+1:]...) //on retire le message qui a été acquitté
+
+					packetCount--
+
+				} else {
+					count++
+				}
+			}
+		default:
+		}
+
 		for i := 0; i < len(messageSentBuffer); i++ {
-			//étape 2: on check les timestamp et on réémet les messages qui sont en timeout
-			msgTimestamp := messageSentBuffer[i][:19]
-			intTimestamp, _ := strconv.ParseInt(string(msgTimestamp), 10, 64)
-			if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
-				//fmt.Print("renvoi du paquet : ")
-				//fmt.Println(string(messageSentBuffer[i][19:25]))
+			extractNumAck := messageSentBuffer[i][19:25]
+			intNumAck, _ := strconv.Atoi(string(extractNumAck))
+			if (intNumAck == numAck+1) && (numAckCount >= 3) {
+				//étape 2 : on vérifie s'il y a des duplicate ack et si oui on retransmet le paquet ack+1 (fast retransmit)
+				timestamp := []byte(strconv.FormatInt(time.Now().UnixNano(), 10)) //on update le timestamp
+				messageSentBuffer[i] = append(timestamp, messageSentBuffer[i][19:]...)
 				_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
 				if err != nil {
 					fmt.Println(err)
 					return -1
 				}
+				fmt.Println("Fast retransmit : ", numAck+1)
+
+				numAckCount = 1
+
 			}
+		}
 
-			select {
-			case numAckReceived := <-channelAck:
-				for i := 0; i < len(messageSentBuffer); i++ {
-					//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
-					extractNumAck := messageSentBuffer[i][19:25]
-					intNumAck, _ := strconv.Atoi(string(extractNumAck))
-					if intNumAck <= numAckReceived {
-						//fmt.Print("Suppression du buffer : ")
-						//fmt.Println(intNumAck)
-						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
-
-						packetCount--
-					}
+		for i := 0; i < len(messageSentBuffer); i++ {
+			//étape 3: on check les timestamp et on réémet les messages qui sont en timeout
+			msgTimestamp := messageSentBuffer[i][:19]
+			intTimestamp, _ := strconv.ParseInt(string(msgTimestamp), 10, 64)
+			if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
+				timestamp := []byte(strconv.FormatInt(time.Now().UnixNano(), 10)) //on update le timestamp
+				messageSentBuffer[i] = append(timestamp, messageSentBuffer[i][19:]...)
+				_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
+				if err != nil {
+					fmt.Println(err)
+					return -1
 				}
-			default:
+				fmt.Println("renvoi du paquet : ", string(messageSentBuffer[i][19:25]))
 			}
+
 		}
 
 	}
