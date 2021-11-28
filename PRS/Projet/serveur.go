@@ -92,19 +92,16 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 
 			select {
 			case numAckReceived := <-channelAck:
-				count := 0 //permet d'éviter les sauts d'index lorsqu'on supprime une entrée du buffer
-				for count < len(messageSentBuffer) {
+				for i := 0; i < len(messageSentBuffer); i++ {
 					//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
-					extractNumAck := messageSentBuffer[count][19:25]
+					extractNumAck := messageSentBuffer[i][19:25]
 					intNumAck, _ := strconv.Atoi(string(extractNumAck))
 					if intNumAck <= numAckReceived {
 						//fmt.Print("Suppression du buffer : ")
 						//fmt.Println(intNumAck)
-						messageSentBuffer = append(messageSentBuffer[:count], messageSentBuffer[count+1:]...) //on retire le message qui a été acquitté
+						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
 
 						packetCount--
-					} else {
-						count++
 					}
 				}
 			default:
@@ -132,37 +129,32 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
 				//fmt.Print("renvoi du paquet : ")
 				//fmt.Println(string(messageSentBuffer[i][19:25]))
-				timestamp := []byte(strconv.FormatInt(time.Now().UnixNano(), 10)) //on update le timestamp
-				messageSentBuffer[i] = append(timestamp, messageSentBuffer[i][19:]...)
 				_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
 				if err != nil {
 					fmt.Println(err)
 					return -1
 				}
 			}
-			//TODO: ya une coquille ici la suite du code doit être en dehors de la boucle for qui renvoit les messages au-dessus mais niveau perf ça a l'air meilleur comme ça à vérifier
+
 			select {
 			case numAckReceived := <-channelAck:
-				count := 0 //permet d'éviter les sauts d'index lorsqu'on supprime une entrée du buffer
-				for count < len(messageSentBuffer) {
+				for i := 0; i < len(messageSentBuffer); i++ {
 					//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
-					extractNumAck := messageSentBuffer[count][19:25]
+					extractNumAck := messageSentBuffer[i][19:25]
 					intNumAck, _ := strconv.Atoi(string(extractNumAck))
 					if intNumAck <= numAckReceived {
 						//fmt.Print("Suppression du buffer : ")
 						//fmt.Println(intNumAck)
-						messageSentBuffer = append(messageSentBuffer[:count], messageSentBuffer[count+1:]...) //on retire le message qui a été acquitté
+						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
 
 						packetCount--
-					} else {
-						count++
 					}
 				}
 			default:
 			}
 		}
-	}
 
+	}
 }
 
 func communicate(wg *sync.WaitGroup, port string) {
