@@ -11,10 +11,11 @@ import (
 	"time"
 )
 
-var RCVSIZE = 1024
+var arg = os.Args
+var RCVSIZE, _ = strconv.Atoi(arg[3])
 var TIMEOUT int64 = 40000000
 
-var window = 70
+var window, _ = strconv.Atoi(arg[2])
 
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
 func receive(channelAck chan int, socketCommunication *net.UDPConn, channelStop chan bool) {
@@ -198,8 +199,8 @@ func main() {
 	var wg sync.WaitGroup
 
 	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("args : port")
+	if len(arguments) < 4 {
+		fmt.Println("args : port window RCVSIZE")
 		return
 	}
 	portConnection := ":" + arguments[1]
