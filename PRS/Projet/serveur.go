@@ -12,10 +12,9 @@ import (
 )
 
 var arg = os.Args
+var window, _ = strconv.Atoi(arg[2])
 var RCVSIZE, _ = strconv.Atoi(arg[3])
 var TIMEOUT int64 = 40000000
-
-var window, _ = strconv.Atoi(arg[2])
 
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
 func receive(channelAck chan int, socketCommunication *net.UDPConn, channelStop chan bool) {
@@ -83,6 +82,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			} else if numSeq < 1000 {
 				seq = []byte("000" + strconv.Itoa(numSeq))
 			} else if numSeq < 10000 {
+
 				seq = []byte("00" + strconv.Itoa(numSeq))
 			} else if numSeq < 100000 {
 				seq = []byte("0" + strconv.Itoa(numSeq))
@@ -90,22 +90,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				seq = []byte(strconv.Itoa(numSeq))
 			}
 
-			select {
-			case numAckReceived := <-channelAck:
-				for i := 0; i < len(messageSentBuffer); i++ {
-					//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
-					extractNumAck := messageSentBuffer[i][19:25]
-					intNumAck, _ := strconv.Atoi(string(extractNumAck))
-					if intNumAck <= numAckReceived {
-						//fmt.Print("Suppression du buffer : ")
-						//fmt.Println(intNumAck)
-						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
-
-						packetCount--
-					}
-				}
-			default:
-			}
 		}
 
 		if len(messageSentBuffer) == 0 {
@@ -169,6 +153,7 @@ func communicate(wg *sync.WaitGroup, port string) {
 	}
 
 	socketCommunication, err := net.ListenUDP("udp4", communicationParameters)
+
 	if err != nil {
 		fmt.Println(err)
 		return
