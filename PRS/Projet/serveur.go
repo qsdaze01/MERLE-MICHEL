@@ -50,6 +50,8 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			_, errEof := file.Read(fileBuffer)
 			if errEof == io.EOF {
 
+				break
+
 				//_, err := socketCommunication.WriteToUDP(eof, clientAddress)
 
 				//fmt.Println("EOF prêt à être envoyé")
@@ -90,6 +92,57 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				seq = []byte(strconv.Itoa(numSeq))
 			}
 
+			if len(messageSentBuffer) == 0 {
+				eof := make([]byte, 3)
+				eof[0] = byte('F')
+				eof[1] = byte('I')
+				eof[2] = byte('N')
+				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
+				endTimer := time.Now()
+				diffTimer := endTimer.Sub(startTimer)
+				//fmt.Println("EOF envoyé, fichier transféré avec succès !")
+				fmt.Println(diffTimer)
+				fmt.Println(window)
+				channelStop <- true //on dit à la go routine receive de s'arrêter
+				return 0            //on s'arrête quand on a tout reçu
+			}
+
+			for i := 0; i < len(messageSentBuffer); i++ {
+				//étape 2: on check les timestamp et on réémet les messages qui sont en timeout
+				msgTimestamp := messageSentBuffer[i][:19]
+				intTimestamp, _ := strconv.ParseInt(string(msgTimestamp), 10, 64)
+				if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
+					//fmt.Print("renvoi du paquet : ")
+					//fmt.Println(string(messageSentBuffer[i][19:25]))
+					if window <= 2 {
+						window = 1
+					} else {
+						window -= 2
+					}
+					_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
+					if err != nil {
+						fmt.Println(err)
+						return -1
+					}
+				}
+
+				select {
+				case numAckReceived := <-channelAck:
+					for i := 0; i < len(messageSentBuffer); i++ {
+						//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
+						extractNumAck := messageSentBuffer[i][19:25]
+						intNumAck, _ := strconv.Atoi(string(extractNumAck))
+						if intNumAck <= numAckReceived {
+							//fmt.Print("Suppression du buffer : ")
+							//fmt.Println(intNumAck)
+							messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
+							window += 50
+							packetCount--
+						}
+					}
+				default:
+				}
+			}
 		}
 
 		if len(messageSentBuffer) == 0 {
@@ -102,6 +155,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			diffTimer := endTimer.Sub(startTimer)
 			//fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
+			fmt.Println(window)
 			channelStop <- true //on dit à la go routine receive de s'arrêter
 			return 0            //on s'arrête quand on a tout reçu
 		}
@@ -113,6 +167,11 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
 				//fmt.Print("renvoi du paquet : ")
 				//fmt.Println(string(messageSentBuffer[i][19:25]))
+				if window <= 2 {
+					window = 1
+				} else {
+					window -= 2
+				}
 				_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
 				if err != nil {
 					fmt.Println(err)
@@ -130,7 +189,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 						//fmt.Print("Suppression du buffer : ")
 						//fmt.Println(intNumAck)
 						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
-
+						window += 50
 						packetCount--
 					}
 				}
