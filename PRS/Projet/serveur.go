@@ -36,16 +36,86 @@ func receive(channelAck chan int, socketCommunication *net.UDPConn, channelStop 
 	}
 }
 
+func checkAck(lockMessageCount sync.Mutex, lockMessageBuffer sync.Mutex, messageSentBuffer [][]byte, socketCommunication *net.UDPConn, clientAddress *net.UDPAddr, channelAck chan int, channelStopCheck chan bool, packetCount []int) int {
+	lockMessageBuffer.Lock()
+	tailleBuffer := len(messageSentBuffer)
+	lockMessageBuffer.Unlock()
+	for i := 0; i < tailleBuffer; i++{
+
+		select {
+		case stop := <-channelStopCheck:
+			if stop == true {
+				return 1 //on stoppe la go routine
+			}
+		default:
+		}
+		//étape 2: on check les timestamp et on réémet les messages qui sont en timeout
+		lockMessageBuffer.Lock()
+		msgTimestamp := messageSentBuffer[i][:19]
+		lockMessageBuffer.Unlock()
+
+		intTimestamp, _ := strconv.ParseInt(string(msgTimestamp), 10, 64)
+		if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
+			//fmt.Print("renvoi du paquet : ")
+			//fmt.Println(string(messageSentBuffer[i][19:25]))
+			lockMessageBuffer.Lock()
+			_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
+			lockMessageBuffer.Unlock()
+			if err != nil {
+				fmt.Println(err)
+				return -1
+			}
+		}
+
+		lockMessageBuffer.Lock()
+		tailleBuffer = len(messageSentBuffer)
+		lockMessageBuffer.Unlock()
+
+		select {
+		case numAckReceived := <-channelAck:
+			for i := 0; i < tailleBuffer; i++ {
+				//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
+				lockMessageBuffer.Lock()
+				tailleBuffer = len(messageSentBuffer)
+				extractNumAck := messageSentBuffer[i][19:25]
+				lockMessageBuffer.Unlock()
+				intNumAck, _ := strconv.Atoi(string(extractNumAck))
+				if intNumAck <= numAckReceived {
+					//fmt.Print("Suppression du buffer : ")
+					//fmt.Println(intNumAck)
+					lockMessageBuffer.Lock()
+					messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
+					lockMessageBuffer.Unlock()
+
+					lockMessageCount.Lock()
+					packetCount[0]--
+					lockMessageCount.Unlock()
+				}
+			}
+		default:
+		}
+	}
+	return 0
+}
+
 func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, channelStop chan bool) int {
 	seq := []byte("000001")
 	numSeq, _ := strconv.Atoi(string(seq))
 	var messageSentBuffer [][]byte
-	packetCount := 0
+
+	channelStopAck := make(chan bool)
+	var packetCount = make([] int,1)
+	packetCount[0] = 0
+	var lockMessageCount sync.Mutex
+	var lockMessageBuffer sync.Mutex
+
 	startTimer := time.Now()
 
 	for {
-
-		for packetCount < window {
+		lockMessageCount.Lock()
+		checkPacketCount := packetCount[0]
+		lockMessageCount.Unlock()
+		for checkPacketCount < window {
 			fileBuffer := make([]byte, RCVSIZE-6)
 			_, errEof := file.Read(fileBuffer)
 			if errEof == io.EOF {
@@ -61,16 +131,19 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				message := append(seq, fileBuffer...)
 				timestamp := []byte(strconv.FormatInt(time.Now().UnixNano(), 10))
 				messageTimestamped := append(timestamp, message...)
+				lockMessageBuffer.Lock()
 				messageSentBuffer = append(messageSentBuffer, messageTimestamped)
-
+				lockMessageBuffer.Unlock()
 				_, err := socketCommunication.WriteToUDP(message, clientAddress)
 				if err != nil {
 					fmt.Println(err)
 					return -1
 				}
 			}
-
-			packetCount++
+			lockMessageCount.Lock()
+			packetCount[0]++
+			checkPacketCount++
+			lockMessageCount.Unlock()
 
 			//fmt.Print("Paquet envoyé : ")
 			//fmt.Println(numSeq)
@@ -82,7 +155,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			} else if numSeq < 1000 {
 				seq = []byte("000" + strconv.Itoa(numSeq))
 			} else if numSeq < 10000 {
-
 				seq = []byte("00" + strconv.Itoa(numSeq))
 			} else if numSeq < 100000 {
 				seq = []byte("0" + strconv.Itoa(numSeq))
@@ -90,8 +162,10 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				seq = []byte(strconv.Itoa(numSeq))
 			}
 
+			go checkAck(lockMessageCount, lockMessageBuffer, messageSentBuffer, socketCommunication, clientAddress, channelAck, channelStopAck, packetCount)
 		}
 
+		lockMessageBuffer.Lock()
 		if len(messageSentBuffer) == 0 {
 			eof := make([]byte, 3)
 			eof[0] = byte('F')
@@ -105,39 +179,9 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			channelStop <- true //on dit à la go routine receive de s'arrêter
 			return 0            //on s'arrête quand on a tout reçu
 		}
+		lockMessageBuffer.Unlock()
 
-		for i := 0; i < len(messageSentBuffer); i++ {
-			//étape 2: on check les timestamp et on réémet les messages qui sont en timeout
-			msgTimestamp := messageSentBuffer[i][:19]
-			intTimestamp, _ := strconv.ParseInt(string(msgTimestamp), 10, 64)
-			if intTimestamp+TIMEOUT < time.Now().UnixNano() { //il faut renvoyer le paquet, il est timeout
-				//fmt.Print("renvoi du paquet : ")
-				//fmt.Println(string(messageSentBuffer[i][19:25]))
-				_, err := socketCommunication.WriteToUDP(messageSentBuffer[i][19:], clientAddress)
-				if err != nil {
-					fmt.Println(err)
-					return -1
-				}
-			}
-
-			select {
-			case numAckReceived := <-channelAck:
-				for i := 0; i < len(messageSentBuffer); i++ {
-					//étape 1: on check les numACK dès qu'on trouve celui qui corrrespond, on supprime le message du buffer, il ne sert plus à rien
-					extractNumAck := messageSentBuffer[i][19:25]
-					intNumAck, _ := strconv.Atoi(string(extractNumAck))
-					if intNumAck <= numAckReceived {
-						//fmt.Print("Suppression du buffer : ")
-						//fmt.Println(intNumAck)
-						messageSentBuffer = append(messageSentBuffer[:i], messageSentBuffer[i+1:]...) //on retire le message qui a été acquitté
-
-						packetCount--
-					}
-				}
-			default:
-			}
-		}
-
+		go checkAck(lockMessageCount, lockMessageBuffer, messageSentBuffer, socketCommunication, clientAddress, channelAck, channelStopAck, packetCount)
 	}
 }
 
