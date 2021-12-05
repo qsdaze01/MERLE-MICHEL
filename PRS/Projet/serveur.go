@@ -48,14 +48,14 @@ func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop cha
 	}
 }
 
-func readFile(file *os.File, numSeq int, fileBuffer *[]byte) (bufferLength int, error error) {
-	offset := (int64)((numSeq - 1) * (RCVSIZE - 6))
-	bytesRead, err := file.ReadAt(*fileBuffer, offset)
-	if err != nil {
-		return bytesRead, err
-	}
-	return bytesRead, nil
-}
+//func readFile(file *os.File, numSeq int, fileBuffer *[]byte) (bufferLength int, error error) {
+//	offset := (int64)((numSeq - 1) * (RCVSIZE - 6))
+//	bytesRead, err := file.ReadAt(*fileBuffer, offset)
+//	if err != nil {
+//		return bytesRead, err
+//	}
+//	return bytesRead, nil
+//}
 
 func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, chanStop chan int) int {
 	seq := []byte("000001")
@@ -73,8 +73,9 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 	for {
 		for (packetCount < window) && (endOfFile == false) {
 
-			bytesRead, errEof := readFile(file, numSeq, &fileBuffer)
-			if errEof == io.EOF {
+			offset := (int64)((numSeq - 1) * (RCVSIZE - 6))
+			bytesRead, err := file.ReadAt(fileBuffer, offset)
+			if err == io.EOF {
 				endOfFile = true //permet de ne plus rentrer dans la boucle en cas d'eof puisqu'on a plus besoin de lire le fichier
 				numSeqEndOfFile = numSeq
 
@@ -90,8 +91,8 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 					return -1
 				}
 
-			} else if errEof != nil {
-				fmt.Println(errEof)
+			} else if err != nil {
+				fmt.Println(err)
 				return -1
 			} else {
 				elem := messageBuffer{}
@@ -190,13 +191,14 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 						return 0
 					}
 				}
-				if item.numSeq <= numAck {
-					messageList.Remove(element) //on supprime l'élément acquitté
-					//fmt.Println("removed : ", itemElem.numSeq)
-					//packetCount--
-				} else {
-					break
-				}
+
+			}
+			if item.numSeq <= numAck {
+				messageList.Remove(element) //on supprime l'élément acquitté
+				//fmt.Println("removed : ", itemElem.numSeq)
+				//packetCount--
+			} else {
+				break
 			}
 		}
 
