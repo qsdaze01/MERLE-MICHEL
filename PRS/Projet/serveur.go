@@ -150,6 +150,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			} else {
 				packets := numAckReceived - numAck
 				packetCount -= packets
+				window += packets //on augmente la window à chaque fois paquet acquitté
 				if packetCount < 0 {
 					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 				}
@@ -161,6 +162,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			}
 
 		default:
+			defaut := false
 			for element := messageList.Front(); element != nil; element = element.Next() {
 				item := element.Value.(messageBuffer)
 				if time.Now().UnixNano()-item.timestamp > TIMEOUT {
@@ -172,6 +174,10 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 					item.timestamp = time.Now().UnixNano() //on remet le timestamp actuel
 					messageList.InsertBefore(item, element)
 					messageList.Remove(element)
+					if defaut == false {
+						window = window / 2 //On diminue la window en cas de timeout
+						defaut = true
+					}
 				}
 			}
 		}
