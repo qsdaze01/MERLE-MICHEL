@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"fmt"
 	"io"
 	"math/rand"
@@ -68,7 +67,8 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 	var numAck = -1
 	var numAckCount = 1
 	fileBuffer := make([]byte, RCVSIZE-6)
-	messageList := list.New() //création d'un buffer sous forme de liste chaînée
+	messageMap := make(map[int]messageBuffer) //création d'un buffer sous forme d'une map
+	var numAckDeleted = 1
 
 	for {
 		for (packetCount < window) && (endOfFile == false) {
@@ -83,7 +83,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				elem.timestamp = time.Now().UnixNano()
 				elem.message = append(seq, fileBuffer...)
 				elem.numSeq = numSeq
-				messageList.PushBack(elem) //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
+				messageMap[numSeq] = elem
 				//fmt.Println("Paquet pushed : ", numSeq)
 				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
@@ -99,7 +99,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				elem.timestamp = time.Now().UnixNano()
 				elem.message = append(seq, fileBuffer...)
 				elem.numSeq = numSeq
-				messageList.PushBack(elem) //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
+				messageMap[numSeq] = elem //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
 				//fmt.Println("Paquet pushed : ", numSeq)
 				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
@@ -126,6 +126,8 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				seq = []byte(strconv.Itoa(numSeq))
 			}
 
+			//time.Sleep(1 * time.Millisecond)
+
 		}
 
 		if (endOfFile == true) && (numAckReceived == numSeqEndOfFile) { //quand on a reçu l'acquittement du dernier paquet, on peut envoyer FIN
@@ -150,7 +152,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			} else {
 				packets := numAckReceived - numAck
 				packetCount -= packets
-				window += packets //on augmente la window à chaque fois paquet acquitté
+				//window += packets //on augmente la window à chaque fois paquet acquitté
 				if packetCount < 0 {
 					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 				}
@@ -162,53 +164,48 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			}
 
 		default:
-			defaut := false
-			for element := messageList.Front(); element != nil; element = element.Next() {
-				item := element.Value.(messageBuffer)
-				if time.Now().UnixNano()-item.timestamp > TIMEOUT {
-					_, err := socketCommunication.WriteToUDP(item.message, clientAddress)
+			//defaut := false
+			for _, value := range messageMap {
+				if time.Now().UnixNano()-value.timestamp > TIMEOUT {
+					_, err := socketCommunication.WriteToUDP(value.message, clientAddress)
 					if err != nil {
 						fmt.Println(err)
 						return 0
 					}
-					item.timestamp = time.Now().UnixNano() //on remet le timestamp actuel
-					messageList.InsertBefore(item, element)
-					messageList.Remove(element)
-					if defaut == false {
-						window = window / 2 //On diminue la window en cas de timeout
-						defaut = true
-					}
+					value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel
+					//if defaut == false {
+					//	window = window / 2 //On diminue la window en cas de timeout
+					//	defaut = true
+					//}
 				}
 			}
 		}
 
-		for element := messageList.Front(); element != nil; element = element.Next() {
-			item := element.Value.(messageBuffer)
-			//fmt.Println("dans la liste : ", item.numSeq)
-			if numAckCount > 3 {
-				if item.numSeq == numAck+1 {
-					//fmt.Println("Fast Retransmit : ", numAck+1)
-					numAckCount = 1
-					//fmt.Println(item.numSeq)
-					//fmt.Println(string(item.message))
-					_, err := socketCommunication.WriteToUDP(item.message, clientAddress)
-					if err != nil {
-						fmt.Println(err)
-						return 0
-					}
+		if numAckCount > 3 {
+			//fmt.Println("Fast Retransmit : ", numAck+1)
+			numAckCount = 1
+			if _, ok := messageMap[numSeq+1]; ok { //TODO: problème à gérer ici FR renvoit à cause des ack en retard des segments qui sont introuvables
+				_, err := socketCommunication.WriteToUDP(messageMap[numSeq+1].message, clientAddress)
+				if err != nil {
+					fmt.Println(err)
+					return 0
 				}
-
-			}
-			if item.numSeq <= numAck {
-				messageList.Remove(element) //on supprime l'élément acquitté
-				//fmt.Println("removed : ", itemElem.numSeq)
-				//packetCount--
+				//time.Sleep(4 * time.Millisecond)
 			} else {
-				break
+				//fmt.Println("Segment introuvable dans le buffer : ", numSeq+1)
 			}
+
+		}
+
+		for i := numAckDeleted; i <= numAck; i++ { //permet d'optimiser la recherche aux numéros ack présents effectivement dans la map
+			if _, ok := messageMap[i]; ok {
+				delete(messageMap, i) //on supprime les messages acquittés
+			}
+			numAckDeleted++
 		}
 
 	}
+
 }
 
 func communicate(wg *sync.WaitGroup, port string) {
