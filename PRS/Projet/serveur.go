@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/list"
 	"fmt"
 	"io"
 	"math/rand"
@@ -11,6 +12,12 @@ import (
 	"time"
 )
 
+type messageBuffer struct {
+	timestamp int64
+	message   []byte
+	numSeq    int
+}
+
 var arg = os.Args
 var RCVSIZE, _ = strconv.Atoi(arg[3])
 var TIMEOUT int64 = 100000000
@@ -20,7 +27,7 @@ var window, _ = strconv.Atoi(arg[2])
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
 func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop chan int) {
 	for {
-		err := socketCommunication.SetReadDeadline(time.Now().Add(1 * time.Second))
+		err := socketCommunication.SetReadDeadline(time.Now().Add(3 * time.Second))
 		if err != nil {
 			return
 		}
@@ -52,18 +59,16 @@ func readFile(file *os.File, numSeq int, fileBuffer *[]byte) (bufferLength int, 
 
 func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, chanStop chan int) int {
 	seq := []byte("000001")
-	seqRetransmit := []byte("000001")
 	numSeq, _ := strconv.Atoi(string(seq))
 	packetCount := 0
 	startTimer := time.Now()
-	startTimeout := time.Now().UnixNano() //sert à détecter une perte de connexion entre le client et le serveur
-	endTimeout := time.Now().UnixNano()
 	var numSeqEndOfFile = 0
 	var numAckReceived = -1
 	var endOfFile = false
-	var numAck = 1
+	var numAck = -1
 	var numAckCount = 1
 	fileBuffer := make([]byte, RCVSIZE-6)
+	messageList := list.New() //création d'un buffer sous forme de liste chaînée
 
 	for {
 		for (packetCount < window) && (endOfFile == false) {
@@ -72,17 +77,30 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			if errEof == io.EOF {
 				endOfFile = true //permet de ne plus rentrer dans la boucle en cas d'eof puisqu'on a plus besoin de lire le fichier
 				numSeqEndOfFile = numSeq
-				//_, err := socketCommunication.WriteToUDP(eof, clientAddress)
 
-				//fmt.Println("EOF prêt à être envoyé")
+				elem := messageBuffer{}
+				elem.timestamp = time.Now().UnixNano()
+				elem.message = append(seq, fileBuffer...)
+				elem.numSeq = numSeq
+				messageList.PushBack(elem) //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
+				//fmt.Println("Paquet pushed : ", numSeq)
+				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
+				if err != nil {
+					//fmt.Println(err)
+					return -1
+				}
 
 			} else if errEof != nil {
-				//fmt.Println(errEof)
+				fmt.Println(errEof)
 				return -1
 			} else {
-				message := append(seq, fileBuffer...)
-
-				_, err := socketCommunication.WriteToUDP(message[:bytesRead+6], clientAddress)
+				elem := messageBuffer{}
+				elem.timestamp = time.Now().UnixNano()
+				elem.message = append(seq, fileBuffer...)
+				elem.numSeq = numSeq
+				messageList.PushBack(elem) //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
+				//fmt.Println("Paquet pushed : ", numSeq)
+				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
 					//fmt.Println(err)
 					return -1
@@ -107,57 +125,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				seq = []byte(strconv.Itoa(numSeq))
 			}
 
-			select {
-			case numAckReceived = <-channelAck:
-				startTimeout = time.Now().UnixNano() //on remet le timeout à 0 parce qu'on a reçu quelque chose du client donc la connexion n'a pas été perdue
-
-				if numAckReceived == numAck { //pour fast retransmit
-					numAckCount++ //on incrémente le compteur des duplicate ack
-					//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
-				} else {
-					packets := numAckReceived - numAck
-					packetCount -= packets
-					if packetCount < 0 {
-						packetCount = 0 //pour éviter qu'on dépasse la fenêtre
-					}
-					numAck = numAckReceived //nouvel ack reçu on remet tout à 0
-					numAckCount = 1
-				}
-
-				if numAckCount > 3 {
-					numAckCount = 1
-					//fmt.Println("Fast Retransmit du paquet dans la boucle: ", numAck+1)
-					bytesRead, err := readFile(file, numAckReceived+1, &fileBuffer)
-					if (err != nil) && (err != io.EOF) {
-						fmt.Println(err)
-						return 0
-					}
-
-					if numAckReceived+1 < 10 {
-						seqRetransmit = []byte("00000" + strconv.Itoa(numAckReceived+1))
-					} else if numAckReceived+1 < 100 {
-						seqRetransmit = []byte("0000" + strconv.Itoa(numAckReceived+1))
-					} else if numAckReceived+1 < 1000 {
-						seqRetransmit = []byte("000" + strconv.Itoa(numAckReceived+1))
-					} else if numAckReceived+1 < 10000 {
-						seqRetransmit = []byte("00" + strconv.Itoa(numAckReceived+1))
-					} else if numAckReceived+1 < 100000 {
-						seqRetransmit = []byte("0" + strconv.Itoa(numAckReceived+1))
-					} else {
-						seqRetransmit = []byte(strconv.Itoa(numAckReceived + 1))
-					}
-
-					message := append(seqRetransmit, fileBuffer...)
-
-					_, err = socketCommunication.WriteToUDP(message[:bytesRead+6], clientAddress)
-					if err != nil {
-						fmt.Println(err)
-						return 0
-					}
-				}
-
-			default:
-			}
 		}
 
 		if (endOfFile == true) && (numAckReceived == numSeqEndOfFile) { //quand on a reçu l'acquittement du dernier paquet, on peut envoyer FIN
@@ -170,14 +137,12 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			diffTimer := endTimer.Sub(startTimer)
 			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
-			chanStop <- 1
-			return 0 //on s'arrête quand on a tout reçu
+			chanStop <- 1 //on dit à la goroutine receive de s'arrêter aussi
+			return 0      //on s'arrête quand on a tout reçu
 		}
 
 		select {
 		case numAckReceived = <-channelAck:
-			startTimeout = time.Now().UnixNano() //on remet le timeout à 0 parce qu'on a reçu quelque chose du client donc la connexion n'a pas été perdue
-
 			if numAckReceived == numAck { //pour fast retransmit
 				numAckCount++ //on incrémente le compteur des duplicate ack
 				//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
@@ -187,75 +152,52 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				if packetCount < 0 {
 					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 				}
-				numAck = numAckReceived //nouvel ack reçu on remet tout à 0
-				numAckCount = 1
-			}
-
-			if numAckCount > 3 {
-				numAckCount = 1
-				//fmt.Println("Fast Retransmit du paquet en dehors de la boucle : ", numAck+1)
-				bytesRead, err := readFile(file, numAckReceived+1, &fileBuffer)
-				if (err != nil) && (err != io.EOF) {
-					fmt.Println(err)
-					return 0
+				if numAckReceived != 0 { //go routine receive renvoit 0 si elle est en timeout
+					numAck = numAckReceived //nouvel ack reçu on remet tout à 0
+					numAckCount = 1
 				}
 
-				if numAckReceived+1 < 10 {
-					seqRetransmit = []byte("00000" + strconv.Itoa(numAckReceived+1))
-				} else if numAckReceived+1 < 100 {
-					seqRetransmit = []byte("0000" + strconv.Itoa(numAckReceived+1))
-				} else if numAckReceived+1 < 1000 {
-					seqRetransmit = []byte("000" + strconv.Itoa(numAckReceived+1))
-				} else if numAckReceived+1 < 10000 {
-					seqRetransmit = []byte("00" + strconv.Itoa(numAckReceived+1))
-				} else if numAckReceived+1 < 100000 {
-					seqRetransmit = []byte("0" + strconv.Itoa(numAckReceived+1))
-				} else {
-					seqRetransmit = []byte(strconv.Itoa(numAckReceived + 1))
-				}
-
-				message := append(seqRetransmit, fileBuffer...)
-
-				_, err = socketCommunication.WriteToUDP(message[:bytesRead+6], clientAddress)
-				if err != nil {
-					fmt.Println(err)
-					return 0
-				}
 			}
 
 		default:
+			for element := messageList.Front(); element != nil; element = element.Next() {
+				item := element.Value.(messageBuffer)
+				if time.Now().UnixNano()-item.timestamp > TIMEOUT {
+					_, err := socketCommunication.WriteToUDP(item.message, clientAddress)
+					if err != nil {
+						fmt.Println(err)
+						return 0
+					}
+					item.timestamp = time.Now().UnixNano() //on remet le timestamp actuel
+					messageList.InsertBefore(item, element)
+					messageList.Remove(element)
+				}
+			}
 		}
-		endTimeout = time.Now().UnixNano()
-		if endTimeout-startTimeout > TIMEOUT {
-			//fmt.Println("TIMEOUT ! Connexion perdue, tentative de reconnexion...")
-			bytesRead, err := readFile(file, numAckReceived+1, &fileBuffer)
-			if (err != nil) && (err != io.EOF) {
-				fmt.Println(err)
-				return 0
-			}
 
-			if numAckReceived+1 < 10 {
-				seqRetransmit = []byte("00000" + strconv.Itoa(numAckReceived+1))
-			} else if numAckReceived+1 < 100 {
-				seqRetransmit = []byte("0000" + strconv.Itoa(numAckReceived+1))
-			} else if numAckReceived+1 < 1000 {
-				seqRetransmit = []byte("000" + strconv.Itoa(numAckReceived+1))
-			} else if numAckReceived+1 < 10000 {
-				seqRetransmit = []byte("00" + strconv.Itoa(numAckReceived+1))
-			} else if numAckReceived+1 < 100000 {
-				seqRetransmit = []byte("0" + strconv.Itoa(numAckReceived+1))
-			} else {
-				seqRetransmit = []byte(strconv.Itoa(numAckReceived + 1))
+		for element := messageList.Front(); element != nil; element = element.Next() {
+			item := element.Value.(messageBuffer)
+			//fmt.Println("dans la liste : ", item.numSeq)
+			if numAckCount > 3 {
+				if item.numSeq == numAck+1 {
+					//fmt.Println("Fast Retransmit : ", numAck+1)
+					numAckCount = 1
+					//fmt.Println(item.numSeq)
+					//fmt.Println(string(item.message))
+					_, err := socketCommunication.WriteToUDP(item.message, clientAddress)
+					if err != nil {
+						fmt.Println(err)
+						return 0
+					}
+				}
+				if item.numSeq <= numAck {
+					messageList.Remove(element) //on supprime l'élément acquitté
+					//fmt.Println("removed : ", itemElem.numSeq)
+					//packetCount--
+				} else {
+					break
+				}
 			}
-
-			message := append(seqRetransmit, fileBuffer...)
-
-			_, err = socketCommunication.WriteToUDP(message[:bytesRead+6], clientAddress)
-			if err != nil {
-				fmt.Println(err)
-				return 0
-			}
-			startTimeout = time.Now().UnixNano()
 		}
 
 	}
