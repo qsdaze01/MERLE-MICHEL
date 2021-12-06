@@ -22,11 +22,15 @@ var RCVSIZE, _ = strconv.Atoi(arg[3])
 var TIMEOUT int64 = 100000000
 
 var window, _ = strconv.Atoi(arg[2])
+var increaseWindowBeforeLimit, _ = strconv.Atoi(arg[4])
+var increaseWindowAfterLimit, _ = strconv.Atoi(arg[5])
+var decreaseWindow, _ = strconv.Atoi(arg[6])
+var limitWindow, _ = strconv.Atoi(arg[7])
 
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
 func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop chan int) {
 	for {
-		err := socketCommunication.SetReadDeadline(time.Now().Add(3 * time.Second))
+		err := socketCommunication.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 		if err != nil {
 			return
 		}
@@ -56,7 +60,7 @@ func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop cha
 //	return bytesRead, nil
 //}
 
-func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, chanStop chan int) int {
+func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, chanStop chan int, wg_communicate *sync.WaitGroup) int {
 	seq := []byte("000001")
 	numSeq, _ := strconv.Atoi(string(seq))
 	packetCount := 0
@@ -135,13 +139,15 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			eof[0] = byte('F')
 			eof[1] = byte('I')
 			eof[2] = byte('N')
+			time.Sleep(50 * time.Millisecond)
 			_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 			endTimer := time.Now()
 			diffTimer := endTimer.Sub(startTimer)
 			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
 			chanStop <- 1 //on dit à la goroutine receive de s'arrêter aussi
-			return 0      //on s'arrête quand on a tout reçu
+			wg_communicate.Done()
+			return 0 //on s'arrête quand on a tout reçu
 		}
 
 		select {
@@ -167,6 +173,11 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			//defaut := false
 			for _, value := range messageMap {
 				if time.Now().UnixNano()-value.timestamp > TIMEOUT {
+					if window <= decreaseWindow {
+						window = 1
+					} else {
+						window -= decreaseWindow
+					}
 					_, err := socketCommunication.WriteToUDP(value.message, clientAddress)
 					if err != nil {
 						fmt.Println(err)
@@ -201,15 +212,18 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			if _, ok := messageMap[i]; ok {
 				delete(messageMap, i) //on supprime les messages acquittés
 			}
+			if window < limitWindow {
+				window += increaseWindowBeforeLimit
+			} else {
+				window += increaseWindowAfterLimit
+			}
 			numAckDeleted++
 		}
-
 	}
-
 }
 
 func communicate(wg *sync.WaitGroup, port string) {
-	defer wg.Done()
+	//defer wg.Done()
 
 	portCommunication := ":" + port
 	communicationParameters, err := net.ResolveUDPAddr("udp4", portCommunication)
@@ -239,9 +253,14 @@ func communicate(wg *sync.WaitGroup, port string) {
 	chanAck := make(chan int)
 	chanStop := make(chan int)
 
-	go send(clientAddress, socketCommunication, file, chanAck, chanStop)
+	var wg_communicate sync.WaitGroup
+
+	wg_communicate.Add(1)
+	go send(clientAddress, socketCommunication, file, chanAck, chanStop, &wg_communicate)
 	go receive(chanAck, socketCommunication, chanStop)
 
+	wg_communicate.Wait()
+	wg.Done()
 }
 
 func main() {
@@ -276,38 +295,37 @@ func main() {
 		return
 	}
 
-	for {
-		handshake1 := make([]byte, 1024)
-		_, clientAddress, err := socketConnect.ReadFromUDP(handshake1)
-		if string(handshake1[0:3]) == "SYN" {
-			handshake2 := "SYN-ACK" + strconv.Itoa(portCommunication)
-			//fmt.Println(handshake2)
-			_, err = socketConnect.WriteToUDP([]byte(handshake2), clientAddress)
+	handshake1 := make([]byte, 1024)
+	_, clientAddress, err := socketConnect.ReadFromUDP(handshake1)
+	if string(handshake1[0:3]) == "SYN" {
+		handshake2 := "SYN-ACK" + strconv.Itoa(portCommunication)
+		//fmt.Println(handshake2)
+		_, err = socketConnect.WriteToUDP([]byte(handshake2), clientAddress)
 
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			//fmt.Println("SYN-ACK")
-
-			//go routine avec socket communication ici
-			wg.Add(1)
-			go communicate(&wg, strconv.Itoa(portCommunication))
-
-			handshake3 := make([]byte, 1024)
-			lengthHandshake3, _, err := socketConnect.ReadFromUDP(handshake3)
-
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			if string(handshake3[0:lengthHandshake3-1]) == "ACK" {
-				fmt.Println("Handshaked !")
-			}
-
-			portCommunication++
+		if err != nil {
+			fmt.Println(err)
+			return
 		}
+
+		//fmt.Println("SYN-ACK")
+
+		//go routine avec socket communication ici
+		wg.Add(1)
+		go communicate(&wg, strconv.Itoa(portCommunication))
+
+		handshake3 := make([]byte, 1024)
+		lengthHandshake3, _, err := socketConnect.ReadFromUDP(handshake3)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		if string(handshake3[0:lengthHandshake3-1]) == "ACK" {
+			fmt.Println("Handshaked !")
+		}
+
+		portCommunication++
 	}
+	wg.Wait()
 }
