@@ -97,11 +97,15 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			eof[0] = byte('F')
 			eof[1] = byte('I')
 			eof[2] = byte('N')
-			_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 			endTimer := time.Now()
 			diffTimer := endTimer.Sub(startTimer)
-			//fmt.Println("EOF envoyé, fichier transféré avec succès !")
+			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
+
+			for b := 0; b < 100 ; b++ {
+				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
+			}
+
 			channelStop <- true //on dit à la go routine receive de s'arrêter
 			return 0            //on s'arrête quand on a tout reçu
 		}
