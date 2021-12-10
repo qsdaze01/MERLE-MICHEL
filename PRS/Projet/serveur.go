@@ -19,7 +19,8 @@ type messageBuffer struct {
 
 var arg = os.Args
 var RCVSIZE, _ = strconv.Atoi(arg[3])
-var TIMEOUT int64 = 100000000
+var RTT, _ = strconv.Atoi(arg[4])
+var TIMEOUT = int64(RTT * 1000000)
 
 var window, _ = strconv.Atoi(arg[2])
 
@@ -180,23 +181,23 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				}
 			}
 		}
-
-		if numAckCount > 3 {
-			//fmt.Println("Fast Retransmit : ", numAck+1)
-			numAckCount = 1
-			if _, ok := messageMap[numSeq+1]; ok { //TODO: problème à gérer ici FR renvoit à cause des ack en retard des segments qui sont introuvables
-				_, err := socketCommunication.WriteToUDP(messageMap[numSeq+1].message, clientAddress)
-				if err != nil {
-					fmt.Println(err)
-					return 0
+		/*
+			if numAckCount > 3 {
+				//fmt.Println("Fast Retransmit : ", numAck+1)
+				numAckCount = 1
+				if _, ok := messageMap[numSeq+1]; ok { //TODO: problème à gérer ici FR renvoit à cause des ack en retard des segments qui sont introuvables
+					_, err := socketCommunication.WriteToUDP(messageMap[numSeq+1].message, clientAddress)
+					if err != nil {
+						fmt.Println(err)
+						return 0
+					}
+					//time.Sleep(4 * time.Millisecond)
+				} else {
+					//fmt.Println("Segment introuvable dans le buffer : ", numSeq+1)
 				}
-				//time.Sleep(4 * time.Millisecond)
-			} else {
-				//fmt.Println("Segment introuvable dans le buffer : ", numSeq+1)
+
 			}
-
-		}
-
+		*/
 		for i := numAckDeleted; i <= numAck; i++ { //permet d'optimiser la recherche aux numéros ack présents effectivement dans la map
 			if _, ok := messageMap[i]; ok {
 				delete(messageMap, i) //on supprime les messages acquittés
