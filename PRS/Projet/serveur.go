@@ -136,13 +136,31 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			eof[0] = byte('F')
 			eof[1] = byte('I')
 			eof[2] = byte('N')
-			_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 			endTimer := time.Now()
 			diffTimer := endTimer.Sub(startTimer)
 			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
+			for i := 0; i < 100; i++ {
+				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
+			}
 			chanStop <- 1 //on dit à la goroutine receive de s'arrêter aussi
 			return 0      //on s'arrête quand on a tout reçu
+		}
+
+		//defaut := false
+		for _, value := range messageMap {
+			if time.Now().UnixNano()-value.timestamp > TIMEOUT {
+				_, err := socketCommunication.WriteToUDP(value.message, clientAddress)
+				if err != nil {
+					fmt.Println(err)
+					return 0
+				}
+				//value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel //TODO: voir si c'est mieux commenté ou pas
+				//if defaut == false {
+				//	window = window / 2 //On diminue la window en cas de timeout
+				//	defaut = true
+				//}
+			}
 		}
 
 		select {
@@ -154,7 +172,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				packets := numAckReceived - numAck
 				packetCount -= packets
 				//window += packets //on augmente la window à chaque fois paquet acquitté
-				if packetCount < 0 {
+				if packetCount < 0 { //TODO: Essayer en le retirant si besoin
 					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 				}
 				if numAckReceived != 0 { //go routine receive renvoit 0 si elle est en timeout
@@ -165,21 +183,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			}
 
 		default:
-			//defaut := false
-			for _, value := range messageMap {
-				if time.Now().UnixNano()-value.timestamp > TIMEOUT {
-					_, err := socketCommunication.WriteToUDP(value.message, clientAddress)
-					if err != nil {
-						fmt.Println(err)
-						return 0
-					}
-					value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel
-					//if defaut == false {
-					//	window = window / 2 //On diminue la window en cas de timeout
-					//	defaut = true
-					//}
-				}
-			}
 		}
 		/*
 			if numAckCount > 3 {
