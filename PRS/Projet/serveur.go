@@ -120,6 +120,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			fmt.Println(diffTimer)
 			for i := 0; i < 100; i++ {
 				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
+				time.Sleep(100 * time.Microsecond)
 			}
 			chanStop <- 1 //on dit à la goroutine receive de s'arrêter aussi
 			return 0      //on s'arrête quand on a tout reçu
