@@ -18,49 +18,26 @@ type messageBuffer struct {
 }
 
 var arg = os.Args
-var RCVSIZE, _ = strconv.Atoi(arg[3])
-var RTT, _ = strconv.Atoi(arg[4])
+var RCVSIZE = 1500
+var RTT = 4
 var TIMEOUT = int64(RTT * 1000000)
 
-var window, _ = strconv.Atoi(arg[2])
+var window = 50
 
-//var repeat1, _ = strconv.Atoi(arg[5])
-//var repeat2, _ = strconv.Atoi(arg[6])
-
-var sleep, _ = strconv.Atoi(arg[5])
+var sleep = 0
 
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
-func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop chan int) {
+func receive(channelAck chan int, socketCommunication *net.UDPConn) {
 	for {
-		//err := socketCommunication.SetReadDeadline(time.Now().Add(3 * time.Second))
-		/*if err != nil {
-			return
-		}*/
 		messageAck := make([]byte, 10)
 		_, _, _ = socketCommunication.ReadFromUDP(messageAck)
-		//select {
-		////case stop := <-chanStop:
-		//	/*if stop == 1 {
-		//		fmt.Println("receive go routine killed")
-		//		return
-		//	}*/
-		//default:
-		//}
+
 		numAck := string(messageAck[3:9])
 		res, _ := strconv.Atoi(numAck)
-		//fmt.Println("ACK : ", numAck)
+
 		channelAck <- res
 	}
 }
-
-//func readFile(file *os.File, numSeq int, fileBuffer *[]byte) (bufferLength int, error error) {
-//	offset := (int64)((numSeq - 1) * (RCVSIZE - 6))
-//	bytesRead, err := file.ReadAt(*fileBuffer, offset)
-//	if err != nil {
-//		return bytesRead, err
-//	}
-//	return bytesRead, nil
-//}
 
 func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, chanStop chan int) int {
 	seq := []byte("000001")
@@ -90,7 +67,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				elem.message = append(seq, fileBuffer...)
 				elem.numSeq = numSeq
 				messageMap[numSeq] = elem
-				//fmt.Println("Paquet pushed : ", numSeq)
 
 				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
@@ -107,7 +83,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				elem.message = append(seq, fileBuffer...)
 				elem.numSeq = numSeq
 				messageMap[numSeq] = elem //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
-				//fmt.Println("Paquet pushed : ", numSeq)
 				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
 					//fmt.Println(err)
@@ -117,7 +92,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 
 			packetCount++
 
-			//fmt.Println("Paquet envoyé : ", numSeq)
 			numSeq++
 			if numSeq < 10 {
 				seq = []byte("00000" + strconv.Itoa(numSeq))
@@ -155,11 +129,9 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 		case numAckReceived = <-channelAck:
 			if numAckReceived == numAck { //pour fast retransmit
 				numAckCount++ //on incrémente le compteur des duplicate ack
-				//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
 			} else {
 				packets := numAckReceived - numAck
 				packetCount -= packets
-				//window += packets //on augmente la window à chaque fois paquet acquitté
 				if packetCount < 0 { //TODO: Essayer en le retirant si besoin
 					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 				}
@@ -180,7 +152,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			numAckDeleted++
 		}
 
-		//defaut := false
 		for _, value := range messageMap {
 			if time.Now().UnixNano()-value.timestamp > TIMEOUT {
 				_, err := socketCommunication.WriteToUDP(value.message, clientAddress)
@@ -189,26 +160,18 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 					return 0
 				}
 
-				value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel //TODO: voir si c'est mieux commenté ou pas
 				if sleep != 0 {
-					time.Sleep(time.Duration(sleep) * time.Millisecond)
+					time.Sleep(time.Duration(sleep) * time.Microsecond)
 				}
-
-				//if defaut == false {
-				//	window = window / 2 //On diminue la window en cas de timeout
-				//	defaut = true
-				//}
 			}
 
 			select {
 			case numAckReceived = <-channelAck:
 				if numAckReceived == numAck { //pour fast retransmit
 					numAckCount++ //on incrémente le compteur des duplicate ack
-					//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
 				} else {
 					packets := numAckReceived - numAck
 					packetCount -= packets
-					//window += packets //on augmente la window à chaque fois paquet acquitté
 					if packetCount < 0 { //TODO: Essayer en le retirant si besoin
 						packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 					}
@@ -223,23 +186,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			}
 		}
 
-		/*
-			if numAckCount > 3 {
-				//fmt.Println("Fast Retransmit : ", numAck+1)
-				numAckCount = 1
-				if _, ok := messageMap[numSeq+1]; ok { //TODO: problème à gérer ici FR renvoit à cause des ack en retard des segments qui sont introuvables
-					_, err := socketCommunication.WriteToUDP(messageMap[numSeq+1].message, clientAddress)
-					if err != nil {
-						fmt.Println(err)
-						return 0
-					}
-					//time.Sleep(4 * time.Millisecond)
-				} else {
-					//fmt.Println("Segment introuvable dans le buffer : ", numSeq+1)
-				}
-
-			}
-		*/
 		for i := numAckDeleted; i <= numAck; i++ { //permet d'optimiser la recherche aux numéros ack présents effectivement dans la map
 			if _, ok := messageMap[i]; ok {
 				delete(messageMap, i) //on supprime les messages acquittés
@@ -270,7 +216,6 @@ func communicate(wg *sync.WaitGroup, port string) {
 
 	filenameClient := make([]byte, 1024)
 	lengthFilenameClient, clientAddress, err := socketCommunication.ReadFromUDP(filenameClient)
-	//fmt.Println(string(filenameClient[0:lengthFilenameClient]))
 
 	file, err := os.Open(string(filenameClient[0 : lengthFilenameClient-1]))
 
@@ -283,8 +228,7 @@ func communicate(wg *sync.WaitGroup, port string) {
 	chanStop := make(chan int)
 
 	go send(clientAddress, socketCommunication, file, chanAck, chanStop)
-	go receive(chanAck, socketCommunication, chanStop)
-
+	go receive(chanAck, socketCommunication)
 }
 
 func main() {
@@ -293,8 +237,8 @@ func main() {
 	var wg sync.WaitGroup
 
 	arguments := os.Args
-	if len(arguments) < 4 {
-		fmt.Println("args : port window RCVSIZE")
+	if len(arguments) < 2 {
+		fmt.Println("args : port")
 		return
 	}
 	portConnection := ":" + arguments[1]
@@ -324,15 +268,12 @@ func main() {
 		_, clientAddress, err := socketConnect.ReadFromUDP(handshake1)
 		if string(handshake1[0:3]) == "SYN" {
 			handshake2 := "SYN-ACK" + strconv.Itoa(portCommunication)
-			//fmt.Println(handshake2)
 			_, err = socketConnect.WriteToUDP([]byte(handshake2), clientAddress)
 
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
-
-			//fmt.Println("SYN-ACK")
 
 			//go routine avec socket communication ici
 			wg.Add(1)
