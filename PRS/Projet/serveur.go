@@ -163,7 +163,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 
 				value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel //TODO: voir si c'est mieux commenté ou pas
 				if sleep != 0 {
-					time.Sleep(time.Duration(sleep) * time.Millisecond)
+					time.Sleep(time.Duration(sleep) * time.Microsecond)
 				}
 
 			}
