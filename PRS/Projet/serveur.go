@@ -151,6 +151,35 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			return 0      //on s'arrête quand on a tout reçu
 		}
 
+		select {
+		case numAckReceived = <-channelAck:
+			if numAckReceived == numAck { //pour fast retransmit
+				numAckCount++ //on incrémente le compteur des duplicate ack
+				//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
+			} else {
+				packets := numAckReceived - numAck
+				packetCount -= packets
+				//window += packets //on augmente la window à chaque fois paquet acquitté
+				if packetCount < 0 { //TODO: Essayer en le retirant si besoin
+					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
+				}
+				if numAckReceived != 0 { //go routine receive renvoit 0 si elle est en timeout
+					numAck = numAckReceived //nouvel ack reçu on remet tout à 0
+					numAckCount = 1
+				}
+
+			}
+
+		default:
+		}
+
+		for i := numAckDeleted; i <= numAck; i++ { //permet d'optimiser la recherche aux numéros ack présents effectivement dans la map
+			if _, ok := messageMap[i]; ok {
+				delete(messageMap, i) //on supprime les messages acquittés
+			}
+			numAckDeleted++
+		}
+
 		//defaut := false
 		for _, value := range messageMap {
 			if time.Now().UnixNano()-value.timestamp > TIMEOUT {
@@ -170,6 +199,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				//	defaut = true
 				//}
 			}
+
 			select {
 			case numAckReceived = <-channelAck:
 				if numAckReceived == numAck { //pour fast retransmit
