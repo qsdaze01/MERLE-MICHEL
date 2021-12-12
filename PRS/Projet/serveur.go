@@ -27,7 +27,7 @@ var window = 15
 var sleep = 250
 
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
-func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop chan int) {
+func receive(channelAck chan int, socketCommunication *net.UDPConn) {
 	for {
 
 		messageAck := make([]byte, 10)
@@ -231,7 +231,7 @@ func communicate(wg *sync.WaitGroup, port string) {
 	chanStop := make(chan int)
 
 	go send(clientAddress, socketCommunication, file, chanAck, chanStop)
-	go receive(chanAck, socketCommunication, chanStop)
+	go receive(chanAck, socketCommunication)
 
 }
 
@@ -241,8 +241,8 @@ func main() {
 	var wg sync.WaitGroup
 
 	arguments := os.Args
-	if len(arguments) < 4 {
-		fmt.Println("args : port window RCVSIZE")
+	if len(arguments) < 2 {
+		fmt.Println("args : port")
 		return
 	}
 	portConnection := ":" + arguments[1]
