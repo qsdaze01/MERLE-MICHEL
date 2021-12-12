@@ -24,23 +24,28 @@ var TIMEOUT = int64(RTT * 1000000)
 
 var window, _ = strconv.Atoi(arg[2])
 
+//var repeat1, _ = strconv.Atoi(arg[5])
+//var repeat2, _ = strconv.Atoi(arg[6])
+
+var sleep, _ = strconv.Atoi(arg[5])
+
 //go routine permettant de recevoir en permanence les ack venant du client et de les envoyer à la go routine send pour qu'elle puisse gérer les retransmissions
 func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop chan int) {
 	for {
-		err := socketCommunication.SetReadDeadline(time.Now().Add(3 * time.Second))
-		if err != nil {
+		//err := socketCommunication.SetReadDeadline(time.Now().Add(3 * time.Second))
+		/*if err != nil {
 			return
-		}
+		}*/
 		messageAck := make([]byte, 10)
 		_, _, _ = socketCommunication.ReadFromUDP(messageAck)
-		select {
-		case stop := <-chanStop:
-			if stop == 1 {
-				fmt.Println("receive go routine killed")
-				return
-			}
-		default:
-		}
+		//select {
+		////case stop := <-chanStop:
+		//	/*if stop == 1 {
+		//		fmt.Println("receive go routine killed")
+		//		return
+		//	}*/
+		//default:
+		//}
 		numAck := string(messageAck[3:9])
 		res, _ := strconv.Atoi(numAck)
 		//fmt.Println("ACK : ", numAck)
@@ -86,6 +91,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				elem.numSeq = numSeq
 				messageMap[numSeq] = elem
 				//fmt.Println("Paquet pushed : ", numSeq)
+
 				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
 					//fmt.Println(err)
@@ -127,8 +133,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				seq = []byte(strconv.Itoa(numSeq))
 			}
 
-			//time.Sleep(1 * time.Millisecond)
-
 		}
 
 		if (endOfFile == true) && (numAckReceived == numSeqEndOfFile) { //quand on a reçu l'acquittement du dernier paquet, on peut envoyer FIN
@@ -155,35 +159,40 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 					fmt.Println(err)
 					return 0
 				}
-				//value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel //TODO: voir si c'est mieux commenté ou pas
+
+				value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel //TODO: voir si c'est mieux commenté ou pas
+				if sleep != 0 {
+					time.Sleep(time.Duration(sleep) * time.Millisecond)
+				}
+
 				//if defaut == false {
 				//	window = window / 2 //On diminue la window en cas de timeout
 				//	defaut = true
 				//}
 			}
-		}
+			select {
+			case numAckReceived = <-channelAck:
+				if numAckReceived == numAck { //pour fast retransmit
+					numAckCount++ //on incrémente le compteur des duplicate ack
+					//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
+				} else {
+					packets := numAckReceived - numAck
+					packetCount -= packets
+					//window += packets //on augmente la window à chaque fois paquet acquitté
+					if packetCount < 0 { //TODO: Essayer en le retirant si besoin
+						packetCount = 0 //pour éviter qu'on dépasse la fenêtre
+					}
+					if numAckReceived != 0 { //go routine receive renvoit 0 si elle est en timeout
+						numAck = numAckReceived //nouvel ack reçu on remet tout à 0
+						numAckCount = 1
+					}
 
-		select {
-		case numAckReceived = <-channelAck:
-			if numAckReceived == numAck { //pour fast retransmit
-				numAckCount++ //on incrémente le compteur des duplicate ack
-				//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
-			} else {
-				packets := numAckReceived - numAck
-				packetCount -= packets
-				//window += packets //on augmente la window à chaque fois paquet acquitté
-				if packetCount < 0 { //TODO: Essayer en le retirant si besoin
-					packetCount = 0 //pour éviter qu'on dépasse la fenêtre
-				}
-				if numAckReceived != 0 { //go routine receive renvoit 0 si elle est en timeout
-					numAck = numAckReceived //nouvel ack reçu on remet tout à 0
-					numAckCount = 1
 				}
 
+			default:
 			}
-
-		default:
 		}
+
 		/*
 			if numAckCount > 3 {
 				//fmt.Println("Fast Retransmit : ", numAck+1)
