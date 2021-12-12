@@ -24,8 +24,7 @@ var TIMEOUT = int64(RTT * 1000000)
 
 var window, _ = strconv.Atoi(arg[2])
 
-//var repeat1, _ = strconv.Atoi(arg[5])
-//var repeat2, _ = strconv.Atoi(arg[6])
+var startProg = time.Now()
 
 var sleep, _ = strconv.Atoi(arg[5])
 
@@ -48,19 +47,9 @@ func receive(channelAck chan int, socketCommunication *net.UDPConn, chanStop cha
 		//}
 		numAck := string(messageAck[3:9])
 		res, _ := strconv.Atoi(numAck)
-		//fmt.Println("ACK : ", numAck)
 		channelAck <- res
 	}
 }
-
-//func readFile(file *os.File, numSeq int, fileBuffer *[]byte) (bufferLength int, error error) {
-//	offset := (int64)((numSeq - 1) * (RCVSIZE - 6))
-//	bytesRead, err := file.ReadAt(*fileBuffer, offset)
-//	if err != nil {
-//		return bytesRead, err
-//	}
-//	return bytesRead, nil
-//}
 
 func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os.File, channelAck chan int, chanStop chan int) int {
 	seq := []byte("000001")
@@ -107,7 +96,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 				elem.message = append(seq, fileBuffer...)
 				elem.numSeq = numSeq
 				messageMap[numSeq] = elem //on place l'élément à la fin pour plus tard limiter le nombre d'itérations sur la boucle for : les plus anciens seront au début de la linkedlist
-				//fmt.Println("Paquet pushed : ", numSeq)
 				_, err := socketCommunication.WriteToUDP(elem.message[:bytesRead+6], clientAddress)
 				if err != nil {
 					//fmt.Println(err)
@@ -117,7 +105,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 
 			packetCount++
 
-			//fmt.Println("Paquet envoyé : ", numSeq)
 			numSeq++
 			if numSeq < 10 {
 				seq = []byte("00000" + strconv.Itoa(numSeq))
@@ -142,8 +129,10 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			eof[2] = byte('N')
 			endTimer := time.Now()
 			diffTimer := endTimer.Sub(startTimer)
+			diffProg := endTimer.Sub(startProg)
 			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
+			fmt.Println(diffProg)
 			for i := 0; i < 100; i++ {
 				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 			}
@@ -155,7 +144,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 		case numAckReceived = <-channelAck:
 			if numAckReceived == numAck { //pour fast retransmit
 				numAckCount++ //on incrémente le compteur des duplicate ack
-				//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
 			} else {
 				packets := numAckReceived - numAck
 				packetCount -= packets
@@ -189,26 +177,18 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 					return 0
 				}
 
-				value.timestamp = time.Now().UnixNano() //on remet le timestamp actuel //TODO: voir si c'est mieux commenté ou pas
 				if sleep != 0 {
 					time.Sleep(time.Duration(sleep) * time.Millisecond)
 				}
-
-				//if defaut == false {
-				//	window = window / 2 //On diminue la window en cas de timeout
-				//	defaut = true
-				//}
 			}
 
 			select {
 			case numAckReceived = <-channelAck:
 				if numAckReceived == numAck { //pour fast retransmit
 					numAckCount++ //on incrémente le compteur des duplicate ack
-					//fmt.Printf("duplicated Ack : %d  / %d times\n", numAck, numAckCount)
 				} else {
 					packets := numAckReceived - numAck
 					packetCount -= packets
-					//window += packets //on augmente la window à chaque fois paquet acquitté
 					if packetCount < 0 { //TODO: Essayer en le retirant si besoin
 						packetCount = 0 //pour éviter qu'on dépasse la fenêtre
 					}
@@ -223,23 +203,6 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			}
 		}
 
-		/*
-			if numAckCount > 3 {
-				//fmt.Println("Fast Retransmit : ", numAck+1)
-				numAckCount = 1
-				if _, ok := messageMap[numSeq+1]; ok { //TODO: problème à gérer ici FR renvoit à cause des ack en retard des segments qui sont introuvables
-					_, err := socketCommunication.WriteToUDP(messageMap[numSeq+1].message, clientAddress)
-					if err != nil {
-						fmt.Println(err)
-						return 0
-					}
-					//time.Sleep(4 * time.Millisecond)
-				} else {
-					//fmt.Println("Segment introuvable dans le buffer : ", numSeq+1)
-				}
-
-			}
-		*/
 		for i := numAckDeleted; i <= numAck; i++ { //permet d'optimiser la recherche aux numéros ack présents effectivement dans la map
 			if _, ok := messageMap[i]; ok {
 				delete(messageMap, i) //on supprime les messages acquittés
