@@ -118,7 +118,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			diffTimer := endTimer.Sub(startTimer)
 			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
-			for i := 0; i < 100; i++ {
+			for i := 0; i < 1000; i++ {
 				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 				time.Sleep(100 * time.Microsecond)
 			}
