@@ -120,7 +120,7 @@ func send(clientAddress *net.UDPAddr, socketCommunication *net.UDPConn, file *os
 			fmt.Println("EOF envoyé, fichier transféré avec succès !")
 			fmt.Println(diffTimer)
 			fmt.Println(diffProg)
-			for i := 0; i < 100; i++ {
+			for i := 0; i < 1000; i++ {
 				_, _ = socketCommunication.WriteToUDP(eof, clientAddress)
 			}
 			chanStop <- 1 //on dit à la goroutine receive de s'arrêter aussi
